@@ -13,7 +13,7 @@ entryother
 initcode
 initcode.out
 kernelmemfs
-mkfs
+/mkfs/mkfs
 kernel/kernel
 dynmod
 kernel/modules/dynmod_sample.elf
