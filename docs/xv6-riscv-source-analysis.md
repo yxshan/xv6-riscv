@@ -148,7 +148,7 @@ QEMUOPTS = -machine virt -m 128M -smp $(CPUS) -nographic
 0x88000000 ────   PHYSTOP = KERNBASE + 128MB
 ```
 
-**关键常量** ([memlayout.h](kernel/memlayout.h)):
+**关键常量** ([memlayout.h](../kernel/memlayout.h)):
 
 | 宏定义 | 值 | 说明 |
 |--------|-----|------|
@@ -239,7 +239,7 @@ QEMU 加载内核到 0x80000000
 
 ### 4.2 关键启动文件
 
-**entry.S** — [kernel/entry.S](kernel/entry.S)
+**entry.S** — [kernel/entry.S](../kernel/entry.S)
 ```asm
 _entry:
     la sp, stack0          # 从 start.c 获取 stack0
@@ -251,13 +251,13 @@ _entry:
     call start              # 跳转到 start()
 ```
 
-**start.c** — [kernel/start.c](kernel/start.c)
+**start.c** — [kernel/start.c](../kernel/start.c)
 - 在 M 模式 (Machine mode) 下运行
 - 配置 `mstatus` 寄存器, 设置 `MPP = Supervisor mode`
 - 通过 `mret` 切换到 S 模式并跳转到 `main()`
 - 同时设置 M 模式的定时器中断向量 `timervec`
 
-**kernel.ld** — [kernel/kernel.ld](kernel/kernel.ld)
+**kernel.ld** — [kernel/kernel.ld](../kernel/kernel.ld)
 ```ld
 OUTPUT_ARCH("riscv")
 ENTRY(_entry)
@@ -300,14 +300,14 @@ SECTIONS {
                                  kwait()/freeproc()
 ```
 
-**6 种进程状态** (定义于 [proc.h](kernel/proc.h)):
+**6 种进程状态** (定义于 [proc.h](../kernel/proc.h)):
 ```c
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 ```
 
 ### 5.2 核心数据结构
 
-**struct proc** — 进程控制块, 位于 [proc.h:85-107](kernel/proc.h):
+**struct proc** — 进程控制块, 位于 [proc.h:85-107](../kernel/proc.h):
 ```c
 struct proc {
     struct spinlock lock;         // 进程锁
@@ -328,7 +328,7 @@ struct proc {
 };
 ```
 
-**struct cpu** — 每 CPU 状态, 位于 [proc.h:22-27](kernel/proc.h):
+**struct cpu** — 每 CPU 状态, 位于 [proc.h:22-27](../kernel/proc.h):
 ```c
 struct cpu {
     struct proc *proc;            // 当前运行的进程
@@ -338,7 +338,7 @@ struct cpu {
 };
 ```
 
-**struct context** — 上下文切换的寄存器快照, 位于 [proc.h:2-19](kernel/proc.h):
+**struct context** — 上下文切换的寄存器快照, 位于 [proc.h:2-19](../kernel/proc.h):
 ```c
 struct context {
     uint64 ra;    // 返回地址
@@ -351,20 +351,20 @@ struct context {
 
 | 函数 | 文件行 | 描述 |
 |------|--------|------|
-| `procinit()` | [proc.c:48](kernel/proc.c) | 初始化进程表, 分配锁和内核栈地址 |
-| `allocproc()` | [proc.c:109](kernel/proc.c) | 分配未使用的进程槽, 设置 trapframe/页表/上下文 |
-| `freeproc()` | [proc.c:155](kernel/proc.c) | 释放进程资源 (trapframe, 页表, ...) |
-| `userinit()` | [proc.c:219](kernel/proc.c) | 创建第一个用户进程 (`/init`) |
-| `kfork()` | [proc.c:259](kernel/proc.c) | 复制当前进程 (fork 的内核实现) |
-| `kexit()` | [proc.c:326](kernel/proc.c) | 进程退出: 关闭文件, 回收子进程, 唤醒父进程 |
-| `kwait()` | [proc.c:370](kernel/proc.c) | 等待子进程退出 (wait 的内核实现) |
-| `growproc()` | [proc.c:236](kernel/proc.c) | 增长/收缩进程内存 (sbrk 的内核实现) |
-| `kkill()` | [proc.c:592](kernel/proc.c) | 杀死进程 (设置 killed 标志) |
-| `scheduler()` | [proc.c:424](kernel/proc.c) | CPU 调度器: 无限循环选择 RUNNABLE 进程执行 |
-| `sched()` | [proc.c:472](kernel/proc.c) | 进程主动放弃 CPU (调用 swtch 到调度器) |
-| `yield()` | [proc.c:493](kernel/proc.c) | 时间片用尽, 让出 CPU |
-| `sleep()` | [proc.c:542](kernel/proc.c) | 进程睡眠在通道上 (释放锁, 等待唤醒) |
-| `wakeup()` | [proc.c:573](kernel/proc.c) | 唤醒所有在通道上睡眠的进程 |
+| `procinit()` | [proc.c:48](../kernel/proc.c) | 初始化进程表, 分配锁和内核栈地址 |
+| `allocproc()` | [proc.c:109](../kernel/proc.c) | 分配未使用的进程槽, 设置 trapframe/页表/上下文 |
+| `freeproc()` | [proc.c:155](../kernel/proc.c) | 释放进程资源 (trapframe, 页表, ...) |
+| `userinit()` | [proc.c:219](../kernel/proc.c) | 创建第一个用户进程 (`/init`) |
+| `kfork()` | [proc.c:259](../kernel/proc.c) | 复制当前进程 (fork 的内核实现) |
+| `kexit()` | [proc.c:326](../kernel/proc.c) | 进程退出: 关闭文件, 回收子进程, 唤醒父进程 |
+| `kwait()` | [proc.c:370](../kernel/proc.c) | 等待子进程退出 (wait 的内核实现) |
+| `growproc()` | [proc.c:236](../kernel/proc.c) | 增长/收缩进程内存 (sbrk 的内核实现) |
+| `kkill()` | [proc.c:592](../kernel/proc.c) | 杀死进程 (设置 killed 标志) |
+| `scheduler()` | [proc.c:424](../kernel/proc.c) | CPU 调度器: 无限循环选择 RUNNABLE 进程执行 |
+| `sched()` | [proc.c:472](../kernel/proc.c) | 进程主动放弃 CPU (调用 swtch 到调度器) |
+| `yield()` | [proc.c:493](../kernel/proc.c) | 时间片用尽, 让出 CPU |
+| `sleep()` | [proc.c:542](../kernel/proc.c) | 进程睡眠在通道上 (释放锁, 等待唤醒) |
+| `wakeup()` | [proc.c:573](../kernel/proc.c) | 唤醒所有在通道上睡眠的进程 |
 
 ### 5.4 fork 实现流程
 
@@ -441,24 +441,24 @@ RISC-V Sv39 使用三级页表, 每级 512 个条目 (9 bits), 页大小 4KB:
 
 | 函数 | 文件行 | 描述 |
 |------|--------|------|
-| `kvminit()` | [vm.c:65](kernel/vm.c) | 创建内核页表 (`kernel_pagetable`) |
-| `kvmmake()` | [vm.c:22](kernel/vm.c) | 构建内核直接映射页表 |
-| `kvmmap()` | [vm.c:57](kernel/vm.c) | 添加内核页表映射 (直接映射 pa=va) |
-| `kvminithart()` | [vm.c:73](kernel/vm.c) | 每个 CPU 启用内核页表 |
-| `walk()` | [vm.c:97](kernel/vm.c) | **三级页表遍历**: 给定 VA, 返回 PTE 地址; alloc=1 时按需创建页表页 |
-| `walkaddr()` | [vm.c:120](kernel/vm.c) | 查找 VA 对应的物理地址 |
-| `mappages()` | [vm.c:145](kernel/vm.c) | 映射 VA 范围到 PA 范围 |
-| `uvmcreate()` | [vm.c:178](kernel/vm.c) | 创建空用户页表 |
-| `uvmalloc()` | [vm.c:216](kernel/vm.c) | 增长用户内存 (分配+映射物理页) |
-| `uvmdealloc()` | [vm.c:246](kernel/vm.c) | 收缩用户内存 (取消映射+释放物理页) |
-| `uvmcopy()` | [vm.c:296](kernel/vm.c) | 复制用户页表 (fork 使用): 逐页复制物理内存 |
-| `uvmfree()` | [vm.c:282](kernel/vm.c) | 释放用户页表及其物理内存 |
-| `uvmunmap()` | [vm.c:192](kernel/vm.c) | 取消映射 VA 范围的页 |
-| `copyout()` | [vm.c:342](kernel/vm.c) | 内核→用户空间拷贝 |
-| `copyin()` | [vm.c:380](kernel/vm.c) | 用户→内核空间拷贝 |
-| `copyinstr()` | [vm.c:409](kernel/vm.c) | 从用户空间拷贝 null 结尾字符串 |
-| `vmfault()` | [vm.c:452](kernel/vm.c) | **惰性分配**: 按需分配用户内存页 |
-| `ismapped()` | [vm.c:475](kernel/vm.c) | 检查虚拟地址是否已映射 |
+| `kvminit()` | [vm.c:65](../kernel/vm.c) | 创建内核页表 (`kernel_pagetable`) |
+| `kvmmake()` | [vm.c:22](../kernel/vm.c) | 构建内核直接映射页表 |
+| `kvmmap()` | [vm.c:57](../kernel/vm.c) | 添加内核页表映射 (直接映射 pa=va) |
+| `kvminithart()` | [vm.c:73](../kernel/vm.c) | 每个 CPU 启用内核页表 |
+| `walk()` | [vm.c:97](../kernel/vm.c) | **三级页表遍历**: 给定 VA, 返回 PTE 地址; alloc=1 时按需创建页表页 |
+| `walkaddr()` | [vm.c:120](../kernel/vm.c) | 查找 VA 对应的物理地址 |
+| `mappages()` | [vm.c:145](../kernel/vm.c) | 映射 VA 范围到 PA 范围 |
+| `uvmcreate()` | [vm.c:178](../kernel/vm.c) | 创建空用户页表 |
+| `uvmalloc()` | [vm.c:216](../kernel/vm.c) | 增长用户内存 (分配+映射物理页) |
+| `uvmdealloc()` | [vm.c:246](../kernel/vm.c) | 收缩用户内存 (取消映射+释放物理页) |
+| `uvmcopy()` | [vm.c:296](../kernel/vm.c) | 复制用户页表 (fork 使用): 逐页复制物理内存 |
+| `uvmfree()` | [vm.c:282](../kernel/vm.c) | 释放用户页表及其物理内存 |
+| `uvmunmap()` | [vm.c:192](../kernel/vm.c) | 取消映射 VA 范围的页 |
+| `copyout()` | [vm.c:342](../kernel/vm.c) | 内核→用户空间拷贝 |
+| `copyin()` | [vm.c:380](../kernel/vm.c) | 用户→内核空间拷贝 |
+| `copyinstr()` | [vm.c:409](../kernel/vm.c) | 从用户空间拷贝 null 结尾字符串 |
+| `vmfault()` | [vm.c:452](../kernel/vm.c) | **惰性分配**: 按需分配用户内存页 |
+| `ismapped()` | [vm.c:475](../kernel/vm.c) | 检查虚拟地址是否已映射 |
 
 ### 6.3 惰性内存分配
 
@@ -483,7 +483,7 @@ sys_sbrk(n) → growproc(n)
 
 ### 6.4 内核物理页分配器
 
-[kalloc.c](kernel/kalloc.c) 实现简单的 **空闲链表** 分配器:
+[kalloc.c](../kernel/kalloc.c) 实现简单的 **空闲链表** 分配器:
 
 ```c
 struct run {
@@ -506,9 +506,9 @@ xv6 区分两种来源的陷阱:
 
 | 来源 | 陷阱向量 | 处理函数 | 入口汇编 |
 |------|----------|----------|----------|
-| 用户模式 → S 模式 | `uservec` (TRAMPOLINE) | `usertrap()` | [trampoline.S](kernel/trampoline.S) |
-| 内核模式 → S 模式 | `kernelvec` | `kerneltrap()` | [kernelvec.S](kernel/kernelvec.S) |
-| M 模式定时器 | `timervec` (start.c) | 软件中断下沉到 S 模式 | [start.c](kernel/start.c) |
+| 用户模式 → S 模式 | `uservec` (TRAMPOLINE) | `usertrap()` | [trampoline.S](../kernel/trampoline.S) |
+| 内核模式 → S 模式 | `kernelvec` | `kerneltrap()` | [kernelvec.S](../kernel/kernelvec.S) |
+| M 模式定时器 | `timervec` (start.c) | 软件中断下沉到 S 模式 | [start.c](../kernel/start.c) |
 
 ### 7.2 用户陷阱处理流程
 
@@ -610,7 +610,7 @@ devintr() [trap.c:185]:
 
 ### 8.1 swtch 汇编
 
-[swtch.S](kernel/swtch.S) 是上下文切换的核心:
+[swtch.S](../kernel/swtch.S) 是上下文切换的核心:
 
 ```asm
 # void swtch(struct context *old, struct context *new);
@@ -656,11 +656,11 @@ scheduler() 选择新 fork 的子进程
 
 ### 9.1 系统调用表
 
-xv6 支持 **21 个系统调用** (定义于 [syscall.h](kernel/syscall.h)):
+xv6 支持 **21 个系统调用** (定义于 [syscall.h](../kernel/syscall.h)):
 
 | 编号 | 名称 | 实现 | 描述 |
 |------|------|------|------|
-| 1 | `SYS_fork` | [sysproc.c](kernel/sysproc.c) | 创建子进程 |
+| 1 | `SYS_fork` | [sysproc.c](../kernel/sysproc.c) | 创建子进程 |
 | 2 | `SYS_exit` | sysproc.c | 退出进程 |
 | 3 | `SYS_wait` | sysproc.c | 等待子进程 |
 | 4 | `SYS_pipe` | sysfile.c | 创建管道 |
@@ -721,7 +721,7 @@ argstr(n, buf, max) [syscall.c:75]: # 从用户空间读取字符串
 
 ### 9.4 用户态系统调用入口
 
-[usys.pl](user/usys.pl) 是 Perl 脚本, 为每个系统调用生成汇编桩:
+[usys.pl](../user/usys.pl) 是 Perl 脚本, 为每个系统调用生成汇编桩:
 
 ```perl
 # 输入: "write" → 输出:
@@ -747,7 +747,7 @@ xv6 文件系统是类 Unix V6 的简单实现, 磁盘布局如下:
 └──────┴───────────┴──────┴──────────────┴──────────────┴──────────────┘
 ```
 
-**超级块** ([fs.h:14-23](kernel/fs.h)):
+**超级块** ([fs.h:14-23](../kernel/fs.h)):
 ```c
 struct superblock {
     uint magic;        // 魔数: 0x10203040
@@ -761,7 +761,7 @@ struct superblock {
 };
 ```
 
-**磁盘 inode** ([fs.h:32-39](kernel/fs.h)):
+**磁盘 inode** ([fs.h:32-39](../kernel/fs.h)):
 ```c
 struct dinode {
     short type;              // 文件类型 (T_FILE, T_DIR, T_DEVICE)
@@ -796,24 +796,24 @@ struct dinode {
 
 | 函数 | 文件行 | 描述 |
 |------|--------|------|
-| `fsinit()` | [fs.c:42](kernel/fs.c) | 读取超级块, 初始化日志, 回收孤儿 inode |
-| `ialloc()` | [fs.c:199](kernel/fs.c) | 分配磁盘 inode |
-| `iget()` | [fs.c:247](kernel/fs.c) | 获取或创建内存 inode 缓存条目 |
-| `ilock()` | [fs.c:293](kernel/fs.c) | 锁定 inode, 必要时从磁盘读取 |
-| `iput()` | [fs.c:337](kernel/fs.c) | 减少引用计数, 无链接时释放 inode |
-| `readi()` | [fs.c:494](kernel/fs.c) | 从 inode 读取数据 |
-| `writei()` | [fs.c:528](kernel/fs.c) | 向 inode 写入数据 |
-| `bmap()` | [fs.c:405](kernel/fs.c) | 将文件内块号映射到磁盘块号 (支持间接块) |
-| `itrunc()` | [fs.c:448](kernel/fs.c) | 截断文件, 释放所有数据块 |
-| `dirlookup()` | [fs.c:574](kernel/fs.c) | 在目录中按名称查找目录项 |
-| `dirlink()` | [fs.c:602](kernel/fs.c) | 在目录中创建新目录项 |
-| `namei()` | [fs.c:709](kernel/fs.c) | 路径名 → inode 解析 |
-| `nameiparent()` | [fs.c:716](kernel/fs.c) | 解析父目录路径 (用于创建/删除文件) |
-| `skipelem()` | [fs.c:645](kernel/fs.c) | 从路径中提取下一个元素名 |
+| `fsinit()` | [fs.c:42](../kernel/fs.c) | 读取超级块, 初始化日志, 回收孤儿 inode |
+| `ialloc()` | [fs.c:199](../kernel/fs.c) | 分配磁盘 inode |
+| `iget()` | [fs.c:247](../kernel/fs.c) | 获取或创建内存 inode 缓存条目 |
+| `ilock()` | [fs.c:293](../kernel/fs.c) | 锁定 inode, 必要时从磁盘读取 |
+| `iput()` | [fs.c:337](../kernel/fs.c) | 减少引用计数, 无链接时释放 inode |
+| `readi()` | [fs.c:494](../kernel/fs.c) | 从 inode 读取数据 |
+| `writei()` | [fs.c:528](../kernel/fs.c) | 向 inode 写入数据 |
+| `bmap()` | [fs.c:405](../kernel/fs.c) | 将文件内块号映射到磁盘块号 (支持间接块) |
+| `itrunc()` | [fs.c:448](../kernel/fs.c) | 截断文件, 释放所有数据块 |
+| `dirlookup()` | [fs.c:574](../kernel/fs.c) | 在目录中按名称查找目录项 |
+| `dirlink()` | [fs.c:602](../kernel/fs.c) | 在目录中创建新目录项 |
+| `namei()` | [fs.c:709](../kernel/fs.c) | 路径名 → inode 解析 |
+| `nameiparent()` | [fs.c:716](../kernel/fs.c) | 解析父目录路径 (用于创建/删除文件) |
+| `skipelem()` | [fs.c:645](../kernel/fs.c) | 从路径中提取下一个元素名 |
 
 ### 10.4 块缓存层 (Buffer Cache)
 
-[bio.c](kernel/bio.c) 实现 LRU (最近最少使用) 块缓存, 使用 **双向链表 + 睡眠锁**。
+[bio.c](../kernel/bio.c) 实现 LRU (最近最少使用) 块缓存, 使用 **双向链表 + 睡眠锁**。
 
 ```c
 struct buf {
@@ -836,7 +836,7 @@ struct buf {
 
 ### 10.5 日志层
 
-[log.c](kernel/log.c) 实现 **write-ahead logging** (预写日志) 以提供崩溃一致性:
+[log.c](../kernel/log.c) 实现 **write-ahead logging** (预写日志) 以提供崩溃一致性:
 
 ```
 begin_op()          # 开始文件系统操作 (可能阻塞直到日志有空间)
@@ -860,7 +860,7 @@ end_op()            # 提交操作: 如果这是最后的活动操作, 执行提
 
 ### 10.6 文件描述符管理
 
-[file.c](kernel/file.c) 管理三种文件类型:
+[file.c](../kernel/file.c) 管理三种文件类型:
 - **FD_INODE**: 普通文件和目录
 - **FD_PIPE**: 管道
 - **FD_DEVICE**: 设备文件 (如控制台)
@@ -886,7 +886,7 @@ struct file {
 
 ### 10.7 管道
 
-[pipe.c](kernel/pipe.c) 实现单向管道通信:
+[pipe.c](../kernel/pipe.c) 实现单向管道通信:
 
 ```c
 struct pipe {
@@ -910,7 +910,7 @@ struct pipe {
 
 ### 11.1 自旋锁 (Spinlock)
 
-[spinlock.c](kernel/spinlock.c) 实现互斥自旋锁:
+[spinlock.c](../kernel/spinlock.c) 实现互斥自旋锁:
 
 ```c
 struct spinlock {
@@ -928,7 +928,7 @@ struct spinlock {
 
 ### 11.2 睡眠锁 (Sleeplock)
 
-[sleeplock.c](kernel/sleeplock.c) 实现可睡眠的互斥锁:
+[sleeplock.c](../kernel/sleeplock.c) 实现可睡眠的互斥锁:
 
 ```c
 struct sleeplock {
@@ -966,7 +966,7 @@ wait_lock          (保护 wait/parent 关系)
 
 ### 12.1 UART 串口
 
-[uart.c](kernel/uart.c) 实现 16550 兼容串口驱动:
+[uart.c](../kernel/uart.c) 实现 16550 兼容串口驱动:
 
 **MMIO 寄存器** (基地址 `UART0 = 0x10000000`):
 - `RHR` (0x00): 接收保持寄存器 (读)
@@ -983,7 +983,7 @@ wait_lock          (保护 wait/parent 关系)
 
 ### 12.2 控制台
 
-[console.c](kernel/console.c) 实现基于 UART 的终端:
+[console.c](../kernel/console.c) 实现基于 UART 的终端:
 
 - 管理输入缓冲区 (支持退格、行编辑)
 - `consoleinit()` — 初始化控制台锁
@@ -992,7 +992,7 @@ wait_lock          (保护 wait/parent 关系)
 
 ### 12.3 PLIC 中断控制器
 
-[plic.c](kernel/plic.c) 管理平台级中断控制器:
+[plic.c](../kernel/plic.c) 管理平台级中断控制器:
 
 ```
 PLIC 中断处理模型:
@@ -1018,7 +1018,7 @@ PLIC 中断处理模型:
 
 ### 12.4 virtio 磁盘
 
-[virtio_disk.c](kernel/virtio_disk.c) 实现 virtio 块设备驱动。
+[virtio_disk.c](../kernel/virtio_disk.c) 实现 virtio 块设备驱动。
 
 **VirtIO MMIO 寄存器** (基地址 `VIRTIO0 = 0x10001000`):
 
@@ -1046,22 +1046,22 @@ VirtIO 使用 **virtqueue** (虚拟队列) 进行 I/O:
 
 ### 13.1 用户库
 
-[user/ulib.c](user/ulib.c) 提供用户态基础库函数:
+[user/ulib.c](../user/ulib.c) 提供用户态基础库函数:
 - `strcpy()`, `strcmp()`, `strlen()`
 - `memset()`, `memcpy()`
 - `gets()`, `stat()`
 - `atoi()`, `fprintf()`, `fputs()`
 
-[user/umalloc.c](user/umalloc.c) 实现用户态内存分配器 (类似 malloc):
+[user/umalloc.c](../user/umalloc.c) 实现用户态内存分配器 (类似 malloc):
 - `malloc()` — 从当前进程 brk 获取内存
 - `free()` — 释放内存 (当前实现为 no-op)
 
-[user/printf.c](user/printf.c) 用户态格式化输出:
+[user/printf.c](../user/printf.c) 用户态格式化输出:
 - `printf()` — 格式化打印 (使用 `write()` 系统调用)
 
 ### 13.2 系统调用入口生成
 
-[user/usys.pl](user/usys.pl): Perl 脚本, 自动为每个系统调用生成汇编入口:
+[user/usys.pl](../user/usys.pl): Perl 脚本, 自动为每个系统调用生成汇编入口:
 
 ```perl
 # 输入系统调用名称列表
@@ -1078,7 +1078,7 @@ while(<>) {
 
 ### 13.3 Shell
 
-[user/sh.c](user/sh.c) 实现简单的 Unix shell:
+[user/sh.c](../user/sh.c) 实现简单的 Unix shell:
 - **重定向**: `>`, `<` (仅简单文件, 不支持合并)
 - **管道**: `|` (支持多级管道)
 - **后台执行**: `&`
@@ -1090,7 +1090,7 @@ while(<>) {
 
 ### 13.4 第一个用户进程
 
-[user/init.c](user/init.c) 是系统启动的第一个用户进程:
+[user/init.c](../user/init.c) 是系统启动的第一个用户进程:
 
 ```c
 int main(void) {
@@ -1126,25 +1126,25 @@ int main(void) {
 
 | 程序 | 文件 | 功能 |
 |------|------|------|
-| `cat` | [cat.c](user/cat.c) | 显示文件内容 |
-| `echo` | [echo.c](user/echo.c) | 回显命令行参数 |
-| `grep` | [grep.c](user/grep.c) | 正则表达式搜索 |
-| `kill` | [kill.c](user/kill.c) | 向进程发送信号 |
-| `ln` | [ln.c](user/ln.c) | 创建硬链接 |
-| `ls` | [ls.c](user/ls.c) | 列出目录内容 |
-| `mkdir` | [mkdir.c](user/mkdir.c) | 创建目录 |
-| `rm` | [rm.c](user/rm.c) | 删除文件 |
-| `wc` | [wc.c](user/wc.c) | 统计文件行数/单词数/字符数 |
-| `sh` | [sh.c](user/sh.c) | shell |
-| `init` | [init.c](user/init.c) | 初始化进程 |
-| `zombie` | [zombie.c](user/zombie.c) | 僵尸进程测试 |
-| `forktest` | [forktest.c](user/forktest.c) | fork 压力测试 |
-| `usertests` | [usertests.c](user/usertests.c) | 综合测试套件 (~65K) |
-| `grind` | [grind.c](user/grind.c) | 随机系统调用压力测试 |
-| `stressfs` | [stressfs.c](user/stressfs.c) | 文件系统压力测试 |
-| `logstress` | [logstress.c](user/logstress.c) | 日志系统压力测试 |
-| `forphan` | [forphan.c](user/forphan.c) | fork + 孤儿进程测试 |
-| `dorphan` | [dorphan.c](user/dorphan.c) | 孤儿进程双重检查测试 |
+| `cat` | [cat.c](../user/cat.c) | 显示文件内容 |
+| `echo` | [echo.c](../user/echo.c) | 回显命令行参数 |
+| `grep` | [grep.c](../user/grep.c) | 正则表达式搜索 |
+| `kill` | [kill.c](../user/kill.c) | 向进程发送信号 |
+| `ln` | [ln.c](../user/ln.c) | 创建硬链接 |
+| `ls` | [ls.c](../user/ls.c) | 列出目录内容 |
+| `mkdir` | [mkdir.c](../user/mkdir.c) | 创建目录 |
+| `rm` | [rm.c](../user/rm.c) | 删除文件 |
+| `wc` | [wc.c](../user/wc.c) | 统计文件行数/单词数/字符数 |
+| `sh` | [sh.c](../user/sh.c) | shell |
+| `init` | [init.c](../user/init.c) | 初始化进程 |
+| `zombie` | [zombie.c](../user/zombie.c) | 僵尸进程测试 |
+| `forktest` | [forktest.c](../user/forktest.c) | fork 压力测试 |
+| `usertests` | [usertests.c](../user/usertests.c) | 综合测试套件 (~65K) |
+| `grind` | [grind.c](../user/grind.c) | 随机系统调用压力测试 |
+| `stressfs` | [stressfs.c](../user/stressfs.c) | 文件系统压力测试 |
+| `logstress` | [logstress.c](../user/logstress.c) | 日志系统压力测试 |
+| `forphan` | [forphan.c](../user/forphan.c) | fork + 孤儿进程测试 |
+| `dorphan` | [dorphan.c](../user/dorphan.c) | 孤儿进程双重检查测试 |
 
 ---
 

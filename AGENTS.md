@@ -5,7 +5,7 @@
 - `kernel/`: RISC-V kernel C and `.S` sources, headers, and `kernel.ld`; `kernel/defs.h` declares cross-module functions.
 - `user/`: user programs and library; `user/foo.c` builds into `user/_foo` for `fs.img`.
 - `mkfs/mkfs.c`: host-side tool that builds the filesystem image.
-- Root: `Makefile`, `README`, `test-xv6.py`, plus analysis docs `xv6-riscv-source-analysis.md` and `xv6-riscv-extension-ideas.md`.
+- Root: `Makefile`, `README.md`, `test-xv6.py`; technical docs live in `docs/`, including `xv6-riscv-source-analysis.md` and `xv6-riscv-extension-ideas.md`.
 
 ## Build, Test, and Development Commands
 

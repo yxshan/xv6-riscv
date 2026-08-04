@@ -146,10 +146,10 @@ KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
 
 ## 文档
 
-- [xv6-riscv-source-analysis.md](xv6-riscv-source-analysis.md)：源码分析
-- [xv6-riscv-extension-ideas.md](xv6-riscv-extension-ideas.md)：扩展思路
-- [xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)：模块架构
-- [xv6-riscv-module-priorities.md](xv6-riscv-module-priorities.md)：模块方向与优先级
+- [xv6-riscv-source-analysis.md](docs/xv6-riscv-source-analysis.md)：源码分析
+- [xv6-riscv-extension-ideas.md](docs/xv6-riscv-extension-ideas.md)：扩展思路
+- [xv6-riscv-module-architecture.md](docs/xv6-riscv-module-architecture.md)：模块架构
+- [xv6-riscv-module-priorities.md](docs/xv6-riscv-module-priorities.md)：模块方向与优先级
 - [AGENTS.md](AGENTS.md)：贡献者指南
 
 ## 致谢

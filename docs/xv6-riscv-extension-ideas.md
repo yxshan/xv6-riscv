@@ -24,7 +24,7 @@
 
 ### 1.1 🟢 实现进程优先级调度
 
-**现状**: xv6 使用简单的轮转 (round-robin) 调度，`scheduler()` 在 `[proc.c:424](kernel/proc.c)` 中遍历进程表，选择第一个 `RUNNABLE` 进程。
+**现状**: xv6 使用简单的轮转 (round-robin) 调度，`scheduler()` 在 `[proc.c:424](../kernel/proc.c)` 中遍历进程表，选择第一个 `RUNNABLE` 进程。
 
 **改造思路**:
 1. 在 `struct proc` 中增加 `int priority` 字段 (0=高 ~ 127=低)
@@ -35,7 +35,7 @@
 6. 实现优先级老化 (priority aging)：定期提升长期等待进程的优先级，防止饥饿
 7. 添加 `nice(int inc)` 系统调用供用户程序调整自身优先级
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), [syscall.h](kernel/syscall.h), [syscall.c](kernel/syscall.c), [sysproc.c](kernel/sysproc.c), [usys.pl](user/usys.pl), [user.h](user/user.h)
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), [syscall.h](../kernel/syscall.h), [syscall.c](../kernel/syscall.c), [sysproc.c](../kernel/sysproc.c), [usys.pl](../user/usys.pl), [user.h](../user/user.h)
 
 **学习重点**: 调度策略设计、饥饿问题、CPU 时间统计
 
@@ -69,7 +69,7 @@
    - 在用户栈上构造返回帧 (包含 `sigreturn` 调用)
    - 设置 `ra` 指向 sigreturn 桩
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), [trap.c](kernel/trap.c), [syscall.h](kernel/syscall.h), [syscall.c](kernel/syscall.c), [sysproc.c](kernel/sysproc.c), trampoline.S
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), [trap.c](../kernel/trap.c), [syscall.h](../kernel/syscall.h), [syscall.c](../kernel/syscall.c), [sysproc.c](../kernel/sysproc.c), trampoline.S
 
 **学习重点**: 异步事件处理、用户态栈帧构造、控制流劫持与恢复
 
@@ -98,7 +98,7 @@
 5. 修改 `kexit()` 处理线程退出 vs 进程退出
 6. 修改 `kwait()` 等待线程
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), [vm.c](kernel/vm.c), [exec.c](kernel/exec.c), [sysproc.c](kernel/sysproc.c)
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), [vm.c](../kernel/vm.c), [exec.c](../kernel/exec.c), [sysproc.c](../kernel/sysproc.c)
 
 **学习重点**: 共享资源管理、引用计数、线程 vs 进程语义、TLS (线程局部存储)
 
@@ -118,7 +118,7 @@
 7. Shell 端实现 `jobs`, `fg`, `bg` 内部命令
 8. 结合信号机制 (1.2) 一起实现
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), [console.c](kernel/console.c), [sysproc.c](kernel/sysproc.c), [sh.c](user/sh.c)
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), [console.c](../kernel/console.c), [sysproc.c](../kernel/sysproc.c), [sh.c](../user/sh.c)
 
 **学习重点**: 终端控制、作业抽象、Shell-内核协作
 
@@ -128,7 +128,7 @@
 
 ### 2.1 🟡 实现写时复制 (Copy-on-Write) Fork
 
-**现状**: `uvmcopy()` 在 `[vm.c:296](kernel/vm.c)` 中逐页复制物理内存，fork 大进程代价高。
+**现状**: `uvmcopy()` 在 `[vm.c:296](../kernel/vm.c)` 中逐页复制物理内存，fork 大进程代价高。
 
 **改造思路**:
 1. 为每个物理页维护引用计数 (需要一个独立的引用计数数组或 hash 表)
@@ -144,7 +144,7 @@
 4. 修改 `kfree()`：检查引用计数，仅当为 0 时释放
 5. 修改 `copyout()`：检查 COW 页 (内核写用户页时也需要触发 COW)
 
-**涉及文件**: [vm.c](kernel/vm.c), [kalloc.c](kernel/kalloc.c), [trap.c](kernel/trap.c), [riscv.h](kernel/riscv.h)
+**涉及文件**: [vm.c](../kernel/vm.c), [kalloc.c](../kernel/kalloc.c), [trap.c](../kernel/trap.c), [riscv.h](../kernel/riscv.h)
 
 **学习重点**: 页级引用计数、惰性复制、Page Fault 处理、物理页生命周期
 
@@ -179,7 +179,7 @@
    - 当物理内存不足时，回收 clean 页 (直接释放) 和 dirty 页 (写回文件或 swap)
 5. 实现 `mmap()` / `munmap()` 系统调用
 
-**涉及文件**: [vm.c](kernel/vm.c), [exec.c](kernel/exec.c), [kalloc.c](kernel/kalloc.c), [trap.c](kernel/trap.c), [proc.h](kernel/proc.h), [sysfile.c](kernel/sysfile.c)
+**涉及文件**: [vm.c](../kernel/vm.c), [exec.c](../kernel/exec.c), [kalloc.c](../kernel/kalloc.c), [trap.c](../kernel/trap.c), [proc.h](../kernel/proc.h), [sysfile.c](../kernel/sysfile.c)
 
 **学习重点**: VMA 管理、按需加载、内存过量使用 (overcommit)、页面回收
 
@@ -201,7 +201,7 @@
 4. 修改 `kalloc()` 在内存不足时触发页面回收
 5. 实现交换统计 (pgfault, pswpin, pswpout)
 
-**涉及文件**: [vm.c](kernel/vm.c), [kalloc.c](kernel/kalloc.c), [trap.c](kernel/trap.c), 新建 swap.c
+**涉及文件**: [vm.c](../kernel/vm.c), [kalloc.c](../kernel/kalloc.c), [trap.c](../kernel/trap.c), 新建 swap.c
 
 **学习重点**: 二级存储管理、页面置换算法、颠簸 (thrashing)
 
@@ -229,7 +229,7 @@
    - IPC_SET: 设置属性
 5. 在 `kexit()` 中清理进程的所有共享内存附加
 
-**涉及文件**: [vm.c](kernel/vm.c), [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), 新建 shm.c
+**涉及文件**: [vm.c](../kernel/vm.c), [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), 新建 shm.c
 
 **学习重点**: 共享资源管理、IPC 命名空间、System V IPC 模型
 
@@ -247,7 +247,7 @@
    - 创建一个新的 `T_SYMLINK` inode
    - 将目标路径字符串写入该 inode 的数据块 (`writei`)
    - 在 `linkpath` 目录中创建目录项指向该 inode
-3. 修改 `namex()` 在 [fs.c:675](kernel/fs.c) 中处理符号链接:
+3. 修改 `namex()` 在 [fs.c:675](../kernel/fs.c) 中处理符号链接:
    - 解析路径时遇到 `T_SYMLINK` 类型
    - 读取链接内容 (目标路径)
    - 拼接剩余路径
@@ -257,7 +257,7 @@
 5. 实现 `readlink()` 系统调用 (读取链接内容)
 6. 安全检查: 最大 symlink 深度 (如 10 层)
 
-**涉及文件**: [fs.h](kernel/fs.h), [fs.c](kernel/fs.c), [sysfile.c](kernel/sysfile.c), [stat.h](kernel/stat.h), [fcntl.h](kernel/fcntl.h)
+**涉及文件**: [fs.h](../kernel/fs.h), [fs.c](../kernel/fs.c), [sysfile.c](../kernel/sysfile.c), [stat.h](../kernel/stat.h), [fcntl.h](../kernel/fcntl.h)
 
 **学习重点**: 路径解析递归、inode 类型扩展、文件系统原子性
 
@@ -289,7 +289,7 @@
 7. 实现 `chown(path, uid, gid)` 系统调用
 8. 修改 `mkfs/mkfs.c` 生成正确的权限
 
-**涉及文件**: [fs.h](kernel/fs.h), [fs.c](kernel/fs.c), [sysfile.c](kernel/sysfile.c), [file.h](kernel/file.h), [mkfs/mkfs.c](mkfs/mkfs.c)
+**涉及文件**: [fs.h](../kernel/fs.h), [fs.c](../kernel/fs.c), [sysfile.c](../kernel/sysfile.c), [file.h](../kernel/file.h), [mkfs/mkfs.c](../mkfs/mkfs.c)
 
 **学习重点**: 自主访问控制 (DAC)、权限位设计、setuid/setgid 语义
 
@@ -317,7 +317,7 @@
 4. 修改 `iappend()` 在 mkfs 中
 5. 最大文件变为: `(12 + 256 + 256*256) * 1024 ≈ 64MB`
 
-**涉及文件**: [fs.h](kernel/fs.h), [fs.c](kernel/fs.c), [mkfs/mkfs.c](mkfs/mkfs.c)
+**涉及文件**: [fs.h](../kernel/fs.h), [fs.c](../kernel/fs.c), [mkfs/mkfs.c](../mkfs/mkfs.c)
 
 **学习重点**: 大文件索引、多级索引性能、空间利用率分析
 
@@ -345,7 +345,7 @@
 5. 实现多磁盘支持 (结合 8.3 多 virtio 磁盘)
 6. 实现 `/proc` 伪文件系统 (结合 10.2)
 
-**涉及文件**: [fs.c](kernel/fs.c), [sysfile.c](kernel/sysfile.c), [file.h](kernel/file.h)
+**涉及文件**: [fs.c](../kernel/fs.c), [sysfile.c](../kernel/sysfile.c), [file.h](../kernel/file.h)
 
 **学习重点**: VFS (虚拟文件系统) 概念、命名空间、设备抽象
 
@@ -369,7 +369,7 @@
 4. 修改 `fileclose()` 清理 FIFO 的管道缓冲区
 5. 允许多个进程同时读写同一个 FIFO
 
-**涉及文件**: [pipe.c](kernel/pipe.c), [fs.h](kernel/fs.h), [fs.c](kernel/fs.c), [sysfile.c](kernel/sysfile.c), [file.c](kernel/file.c)
+**涉及文件**: [pipe.c](../kernel/pipe.c), [fs.h](../kernel/fs.h), [fs.c](../kernel/fs.c), [sysfile.c](../kernel/sysfile.c), [file.c](../kernel/file.c)
 
 **学习重点**: 命名 vs 匿名 IPC、文件系统与 IPC 的交集
 
@@ -387,7 +387,7 @@
 5. socket 内部缓冲区管理 (流式、消息边界)
 6. 支持 `SOCK_STREAM` (流式) 和 `SOCK_DGRAM` (数据报)
 
-**涉及文件**: [file.h](kernel/file.h), [file.c](kernel/file.c), 新建 socket.c, [sysfile.c](kernel/sysfile.c)
+**涉及文件**: [file.h](../kernel/file.h), [file.c](../kernel/file.c), 新建 socket.c, [sysfile.c](../kernel/sysfile.c)
 
 **学习重点**: Socket API 语义、连接建立流程、流式 vs 数据报
 
@@ -419,7 +419,7 @@
 4. V (signal/release) 操作: `val++`，wakeup 等待者
 5. `SEM_UNDO`: 进程退出时自动释放持有的信号量
 
-**涉及文件**: 新建 sem.c, [syscall.h](kernel/syscall.h), [proc.c](kernel/proc.c)
+**涉及文件**: 新建 sem.c, [syscall.h](../kernel/syscall.h), [proc.c](../kernel/proc.c)
 
 **学习重点**: 同步原语、死锁避免、原子操作
 
@@ -445,7 +445,7 @@
 4. 修改 `clockintr()` 更新进程的运行时间
 5. 修改 `yield()` / `sleep()` / `wakeup()` 考虑优先级队列
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), [trap.c](kernel/trap.c)
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), [trap.c](../kernel/trap.c)
 
 **学习重点**: 公平调度、优先级反转、交互式 vs 批处理
 
@@ -463,7 +463,7 @@
 5. 新进程的 `vruntime` = 当前最小 `vruntime` (避免新进程获得不公平的优势)
 6. 实现红黑树 (从 Linux 简化移植或用跳表简化)
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), 新建 rbtree.c/rbtree.h
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), 新建 rbtree.c/rbtree.h
 
 **学习重点**: 完全公平调度、红黑树、虚拟运行时间、权重计算
 
@@ -492,7 +492,7 @@
    - DHCP (自动获取 IP)
 6. 用户程序: 简单的 HTTP 服务器、telnet 客户端
 
-**涉及文件**: 大量新建文件 (net/, lwip/), [virtio.h](kernel/virtio.h), [file.h](kernel/file.h), [syscall.c](kernel/syscall.c)
+**涉及文件**: 大量新建文件 (net/, lwip/), [virtio.h](../kernel/virtio.h), [file.h](../kernel/file.h), [syscall.c](../kernel/syscall.c)
 
 **学习重点**: TCP/IP 协议、socket 编程模型、网络驱动模型、协议栈分层
 
@@ -551,7 +551,7 @@
 8. init 进程以 root (uid=0) 运行，login 后切换用户
 9. 修改 `userinit()` 设置 init 的 uid=0
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), [sysproc.c](kernel/sysproc.c), [sysfile.c](kernel/sysfile.c), [exec.c](kernel/exec.c), 新建 user/login.c
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), [sysproc.c](../kernel/sysproc.c), [sysfile.c](../kernel/sysfile.c), [exec.c](../kernel/exec.c), 新建 user/login.c
 
 **学习重点**: 权限模型、setuid 机制、进程凭证管理
 
@@ -568,7 +568,7 @@
    - 设置 `p->root` 为指定目录的 inode
 4. 在 `kfork()` 中继承 root
 
-**涉及文件**: [proc.h](kernel/proc.h), [fs.c](kernel/fs.c), [sysfile.c](kernel/sysfile.c)
+**涉及文件**: [proc.h](../kernel/proc.h), [fs.c](../kernel/fs.c), [sysfile.c](../kernel/sysfile.c)
 
 **学习重点**: 命名空间隔离、容器基础概念
 
@@ -585,7 +585,7 @@
 5. 使用硬件随机数源 (RISC-V 的 `seed` 扩展或定时器)
 6. 实现随机数生成器
 
-**涉及文件**: [exec.c](kernel/exec.c), [vm.c](kernel/vm.c)
+**涉及文件**: [exec.c](../kernel/exec.c), [vm.c](../kernel/vm.c)
 
 **学习重点**: 安全缓解技术、随机化与兼容性
 
@@ -607,7 +607,7 @@
 4. 设备文件 `/dev/fb0` 允许用户程序 mmap framebuffer
 5. 用户程序: 简单的图形 demo (mandelbrot, 画线, etc.)
 
-**涉及文件**: 新建 fb.c, [memlayout.h](kernel/memlayout.h), [file.c](kernel/file.c)
+**涉及文件**: 新建 fb.c, [memlayout.h](../kernel/memlayout.h), [file.c](../kernel/file.c)
 
 **学习重点**: 内存映射 I/O、framebuffer、像素操作
 
@@ -629,7 +629,7 @@
    - 新增设备号分配
 4. 实现 `mount` / `umount` (结合 3.4)
 
-**涉及文件**: [virtio_disk.c](kernel/virtio_disk.c), [virtio.h](kernel/virtio.h), [fs.c](kernel/fs.c), [bio.c](kernel/bio.c)
+**涉及文件**: [virtio_disk.c](../kernel/virtio_disk.c), [virtio.h](../kernel/virtio.h), [fs.c](../kernel/fs.c), [bio.c](../kernel/bio.c)
 
 **学习重点**: 设备枚举、总线扫描、多设备管理
 
@@ -645,7 +645,7 @@
 3. 实现 `gettimeofday()` 系统调用
 4. 使用 RISC-V time CSR 实现微秒级时间戳
 
-**涉及文件**: [trap.c](kernel/trap.c), [start.c](kernel/start.c), [sysproc.c](kernel/sysproc.c)
+**涉及文件**: [trap.c](../kernel/trap.c), [start.c](../kernel/start.c), [sysproc.c](../kernel/sysproc.c)
 
 **学习重点**: 定时器硬件编程、时间管理、中断频率权衡
 
@@ -655,7 +655,7 @@
 
 ### 9.1 🟢 增强 Shell 功能
 
-**现状**: Shell ([sh.c](user/sh.c)) 功能较基础。
+**现状**: Shell ([sh.c](../user/sh.c)) 功能较基础。
 
 **改造思路**:
 1. **环境变量**: 
@@ -674,7 +674,7 @@
    - `2>&1` 合并 stderr
    - `>>&` 追加重定向
 
-**涉及文件**: [sh.c](user/sh.c), [init.c](user/init.c), [proc.h](kernel/proc.h), [exec.c](kernel/exec.c)
+**涉及文件**: [sh.c](../user/sh.c), [init.c](../user/init.c), [proc.h](../kernel/proc.h), [exec.c](../kernel/exec.c)
 
 **学习重点**: Shell 编程、词法/语法分析、环境变量传递
 
@@ -699,7 +699,7 @@
 5. 将用户库 (ulib, printf, umalloc) 编译为 `libc.so`
 6. 实现 `dlopen()`, `dlsym()`, `dlclose()`
 
-**涉及文件**: [exec.c](kernel/exec.c), [elf.h](kernel/elf.h), 新建 user/ldso.c, Makefile
+**涉及文件**: [exec.c](../kernel/exec.c), [elf.h](../kernel/elf.h), 新建 user/ldso.c, Makefile
 
 **学习重点**: ELF 格式、PLT/GOT、重定位、延迟绑定、共享内存映射
 
@@ -717,7 +717,7 @@
    - 基本编辑命令 (移动、插入、删除)
    - 文件打开/保存
 
-**涉及文件**: 新建 user/edit.c, [console.c](kernel/console.c)
+**涉及文件**: 新建 user/edit.c, [console.c](../kernel/console.c)
 
 **学习重点**: 终端控制、文本缓冲区、UI 编程
 
@@ -741,7 +741,7 @@
    strace -p 5        # 追踪 pid 5 的进程
    ```
 
-**涉及文件**: [proc.h](kernel/proc.h), [syscall.c](kernel/syscall.c), [sysproc.c](kernel/sysproc.c), 新建 user/strace.c
+**涉及文件**: [proc.h](../kernel/proc.h), [syscall.c](../kernel/syscall.c), [sysproc.c](../kernel/sysproc.c), 新建 user/strace.c
 
 **学习重点**: 可观测性设计、系统调用拦截、用户态工具
 
@@ -775,7 +775,7 @@
    - 每次 read 时动态生成内容
 4. 用户程序: `cat /proc/cpuinfo`, `ps` (利用 /proc)
 
-**涉及文件**: 新建 procfs.c, [fs.c](kernel/fs.c), [proc.c](kernel/proc.c)
+**涉及文件**: 新建 procfs.c, [fs.c](../kernel/fs.c), [proc.c](../kernel/proc.c)
 
 **学习重点**: 虚拟文件系统、内核数据导出、on-demand 数据生成
 
@@ -806,7 +806,7 @@
    - `sched()` → `swtch()`: context_switches
 5. 实现 `perf_getpid(pid)` 系统调用读取统计
 
-**涉及文件**: [proc.h](kernel/proc.h), [proc.c](kernel/proc.c), [riscv.h](kernel/riscv.h), [sysproc.c](kernel/sysproc.c)
+**涉及文件**: [proc.h](../kernel/proc.h), [proc.c](../kernel/proc.c), [riscv.h](../kernel/riscv.h), [sysproc.c](../kernel/sysproc.c)
 
 **学习重点**: 性能分析基础、硬件计数器、开销最小化
 
@@ -826,7 +826,7 @@
 3. 在 `panic()` 时将内存内容写入磁盘的预留区域
 4. 引导时检测 crash dump 并显示
 
-**涉及文件**: [printf.c](kernel/printf.c), [proc.c](kernel/proc.c), 新建 backtrace.c
+**涉及文件**: [printf.c](../kernel/printf.c), [proc.c](../kernel/proc.c), 新建 backtrace.c
 
 **学习重点**: 调用栈布局、崩溃分析、事后调试
 
