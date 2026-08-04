@@ -1,0 +1,191 @@
+//
+// 控制台输入输出。
+// 它把 UART 串口包装成用户可读写的文件（设备 CONSOLE）。
+// 输入按“行”为单位：中断处理器把字符放入环形缓冲区，
+// 用户 read() 系统调用睡眠等待一整行到来。
+// 支持特殊输入字符：
+//   换行     -- 行结束
+//   Ctrl-H   -- 退格
+//   Ctrl-U   -- 删除整行
+//   Ctrl-D   -- 文件结束
+//   Ctrl-P   -- 打印进程列表
+//
+
+#include <stdarg.h>
+
+#include "types.h"
+#include "param.h"
+#include "spinlock.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#include "memlayout.h"
+#include "riscv.h"
+#include "defs.h"
+#include "proc.h"
+
+#define BACKSPACE 0x100  // erase the last output character
+#define C(x)  ((x)-'@')  // Control-x
+
+//
+// 向串口发送一个字符，不使用中断也不睡眠，
+// 因此可以从中断上下文安全调用（printf 和输入回显都在用）。
+//
+void
+consputc(int c)
+{
+  if(c == BACKSPACE){
+    // 退格键：先回退、打印空格、再回退，把屏幕上的字符擦掉。
+    uartputc_sync('\b'); uartputc_sync(' '); uartputc_sync('\b');
+  } else {
+    uartputc_sync(c);
+  }
+}
+
+struct {
+  struct spinlock lock;
+  
+  // input circular buffer
+#define INPUT_BUF_SIZE 128
+  char buf[INPUT_BUF_SIZE];
+  uint r;  // Read index
+  uint w;  // Write index
+  uint e;  // Edit index
+} cons;
+
+//
+// 用户 write() 到控制台的入口。
+// 使用 uartwrite()，它依赖睡眠和 UART 发送完成中断。
+//
+int
+consolewrite(int user_src, uint64 src, int n)
+{
+  char buf[32]; // move batches from user space to uart.
+  int i = 0;
+
+  while(i < n){
+    int nn = sizeof(buf);
+    if(nn > n - i)
+      nn = n - i;
+    if(either_copyin(buf, user_src, src+i, nn) == -1)
+      break;
+    uartwrite(buf, nn);
+    i += nn;
+  }
+
+  return i;
+}
+
+//
+// 用户 read() 从控制台读取的入口。
+// 通常复制一整行到用户缓冲区；用户/内核地址由 user_dst 区分。
+//
+int
+consoleread(int user_dst, uint64 dst, int n)
+{
+  uint target;
+  int c;
+  char cbuf;
+
+  target = n;
+  acquire(&cons.lock);
+  while(n > 0){
+    // 等待中断处理器把输入放入 cons.buf。
+    while(cons.r == cons.w){
+      if(killed(myproc())){
+        release(&cons.lock);
+        return -1;
+      }
+      sleep(&cons.r, &cons.lock);
+    }
+
+    c = cons.buf[cons.r++ % INPUT_BUF_SIZE];
+
+    if(c == C('D')){  // end-of-file
+      if(n < target){
+        // 把 ^D 留到下一次，确保本次调用能返回 0 字节。
+        cons.r--;
+      }
+      break;
+    }
+
+    // 复制输入字节到用户缓冲区。
+    cbuf = c;
+    if(either_copyout(user_dst, dst, &cbuf, 1) == -1)
+      break;
+
+    dst++;
+    --n;
+
+    if(c == '\n'){
+      // a whole line has arrived, return to
+      // the user-level read().
+      break;
+    }
+  }
+  release(&cons.lock);
+
+  return target - n;
+}
+
+//
+// 控制台输入中断处理器，uartintr() 对每个输入字符调用。
+// 处理退格/删行等编辑操作，把字符存入 cons.buf，
+// 并在一整行到达时唤醒 consoleread()。
+//
+void
+consoleintr(int c)
+{
+  acquire(&cons.lock);
+
+  switch(c){
+  case C('P'):  // Print process list.
+    procdump();
+    break;
+  case C('U'):  // Kill line.
+    while(cons.e != cons.w &&
+          cons.buf[(cons.e-1) % INPUT_BUF_SIZE] != '\n'){
+      cons.e--;
+      consputc(BACKSPACE);
+    }
+    break;
+  case C('H'): // Backspace
+  case '\x7f': // Delete key
+    if(cons.e != cons.w){
+      cons.e--;
+      consputc(BACKSPACE);
+    }
+    break;
+  default:
+    if(c != 0 && cons.e-cons.r < INPUT_BUF_SIZE){
+      c = (c == '\r') ? '\n' : c;
+
+      // 回显字符。
+      consputc(c);
+
+      // 存入环形缓冲区供 consoleread() 消费。
+      cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
+
+      if(c == '\n' || c == C('D') || cons.e-cons.r == INPUT_BUF_SIZE){
+        // 一整行（或文件结束、缓冲区满）到达时唤醒读进程。
+        cons.w = cons.e;
+        wakeup(&cons.r);
+      }
+    }
+    break;
+  }
+  
+  release(&cons.lock);
+}
+
+void
+consoleinit(void)
+{
+  initlock(&cons.lock, "cons");
+
+  uartinit();
+
+  // 把控制台设备挂到 devsw 表，read/write 系统调用由此分派。
+  devsw[CONSOLE].read = consoleread;
+  devsw[CONSOLE].write = consolewrite;
+}
