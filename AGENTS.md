@@ -17,11 +17,12 @@ Requires a RISC-V newlib toolchain and `qemu-system-riscv64` 7.2+; override `TOO
 - `make qemu-gdb`: boot under a GDB stub; `make print-gdbport` prints the port.
 - `make clean`: remove build artifacts. `make tags`: regenerate etags.
 - `make user/_usertests`: build the split user-space test suite.
-- `make test-quick`: run `usertests -q`, standalone tool tests, and module lifecycle tests.
+- `make test-quick`: run host checks, `usertests -q`, standalone tools, `grind`, and module lifecycle tests.
 - `make test`: run `test-quick` as the default stable entry point.
 - `make test-all`: run `test` plus crash-recovery tests.
 - `./test-xv6.py usertests`: run the full in-guest suite; add `-q` for quick tests. `./test-xv6.py crash` runs crash-recovery tests. The first argument is a regex over the script's `test_*` functions.
-- `./test-xv6.py tools`: run standalone tool checks (`cowtest`, `shmtest`, `signaltest`, `strace`, `ps`).
+- `./test-xv6.py tools`: run standalone tools, observability commands, and shell features.
+- `./test-xv6.py grind`: run a short random syscall stress test.
 - `./test-xv6.py modules`: run the dynamic module lifecycle checks.
 
 ## Coding Style & Naming Conventions

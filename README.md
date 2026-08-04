@@ -65,7 +65,7 @@ make clean              # 清理构建产物
 自动化测试：
 
 ```bash
-make test-quick     # usertests -q + tools + modules
+make test-quick     # host checks + usertests -q + tools + grind + modules
 make test           # 默认稳定测试入口
 make test-all       # test + crash
 ./test-xv6.py -q usertests

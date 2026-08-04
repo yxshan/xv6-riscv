@@ -337,9 +337,18 @@ dynmod_lifecycle(char *s)
 void
 kernel_selftest(char *s)
 {
-  if(module_call(KMOD_SELFTEST, SELFTEST_CMD_BASIC, 0, 0) != 0){
-    printf("%s: kernel selftest failed\n", s);
-    exit(1);
+  int cmds[] = {
+    SELFTEST_CMD_BASIC,
+    SELFTEST_CMD_REGISTRY,
+    SELFTEST_CMD_SIGNAL,
+    SELFTEST_CMD_MEMORY,
+  };
+
+  for(int i = 0; i < (int)(sizeof(cmds)/sizeof(cmds[0])); i++){
+    if(module_call(KMOD_SELFTEST, cmds[i], 0, 0) != 0){
+      printf("%s: kernel selftest cmd %d failed\n", s, cmds[i]);
+      exit(1);
+    }
   }
   exit(0);
 }

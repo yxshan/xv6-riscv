@@ -147,6 +147,47 @@ module_unregister(int id)
 }
 
 int
+module_registry_check(void)
+{
+  int fail = 0;
+
+  acquire(&dynlock);
+  for(struct sysmod *m = __kmod_sys_start; m < __kmod_sys_end; m++){
+    if(m->id <= 0 || m->name == 0 || m->handle == 0){
+      fail = 1;
+      goto out;
+    }
+    for(struct sysmod *n = m + 1; n < __kmod_sys_end; n++){
+      if(n->id == m->id){
+        fail = 1;
+        goto out;
+      }
+    }
+  }
+  for(int i = 0; i < ndyn; i++){
+    if(dynsys[i].id <= 0 || dynsys[i].name == 0 || dynsys[i].handle == 0){
+      fail = 1;
+      goto out;
+    }
+    for(int j = i + 1; j < ndyn; j++){
+      if(dynsys[j].id == dynsys[i].id){
+        fail = 1;
+        goto out;
+      }
+    }
+    for(struct sysmod *m = __kmod_sys_start; m < __kmod_sys_end; m++){
+      if(m->id == dynsys[i].id){
+        fail = 1;
+        goto out;
+      }
+    }
+  }
+out:
+  release(&dynlock);
+  return fail ? -1 : 0;
+}
+
+int
 module_exit_register(void (*exit_fn)(void))
 {
   if(exit_fn == 0)

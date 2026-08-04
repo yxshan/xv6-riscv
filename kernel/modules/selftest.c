@@ -40,6 +40,17 @@ selftest_basic(void)
   return 0;
 }
 
+static int
+selftest_signal(void)
+{
+  struct proc *p = myproc();
+
+  acquire(&p->lock);
+  int ok = (p->sigactive == 0);
+  release(&p->lock);
+  return ok ? 0 : -1;
+}
+
 static uint64
 selftest_handler(int cmd, uint64 arg0, uint64 arg1)
 {
@@ -49,6 +60,14 @@ selftest_handler(int cmd, uint64 arg0, uint64 arg1)
   switch(cmd){
   case SELFTEST_CMD_BASIC:
     return selftest_basic();
+  case SELFTEST_CMD_REGISTRY:
+    return module_registry_check();
+  case SELFTEST_CMD_SIGNAL:
+    return selftest_signal();
+  case SELFTEST_CMD_MEMORY:
+    if(cow_selftest() != 0 || shm_selftest() != 0)
+      return -1;
+    return 0;
   default:
     return -1;
   }

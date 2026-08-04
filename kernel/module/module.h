@@ -80,6 +80,7 @@ int module_device_register(struct kmod_device *dev);
 int module_device_unregister(int major);
 int module_register(int id, const char *name, uint64 (*handler)(int, uint64, uint64));
 int module_unregister(int id);
+int module_registry_check(void);
 int module_load(uint64 src, int len);
 int module_unload(void);
 

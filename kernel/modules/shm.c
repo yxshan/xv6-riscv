@@ -227,6 +227,26 @@ shm_subref_pa(uint64 pa)
   release(&shmlock);
 }
 
+int
+shm_selftest(void)
+{
+  acquire(&shmlock);
+  for(int i = 0; i < NSHM; i++){
+    struct shmseg *seg = &shmsegs[i];
+
+    if(!seg->used)
+      continue;
+    if(seg->id <= 0 || seg->ref < 0 ||
+       seg->npages <= 0 || seg->npages > SHM_MAX_PAGES ||
+       seg->va < SHM_BASE || seg->va + seg->npages * PGSIZE > TRAPFRAME){
+      release(&shmlock);
+      return -1;
+    }
+  }
+  release(&shmlock);
+  return 0;
+}
+
 uint64
 sys_shmget(void)
 {

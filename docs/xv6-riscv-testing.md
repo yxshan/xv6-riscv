@@ -92,7 +92,8 @@ usertests -q
 ```bash
 ./test-xv6.py usertests        # 完整用户态回归
 ./test-xv6.py -q usertests     # 快速回归
-./test-xv6.py tools            # 独立工具：cowtest/shmtest/signaltest/strace/ps
+./test-xv6.py tools            # 独立工具、shell 特性与可观测工具
+./test-xv6.py grind            # 随机 syscall 压力测试
 ./test-xv6.py modules          # 动态模块加载/调用/卸载
 ./test-xv6.py crash            # 崩溃恢复测试
 ```
@@ -111,7 +112,7 @@ def test_cow():
 也可以直接使用聚合入口：
 
 ```bash
-make test-quick   # 构建 + usertests -q + tools + modules
+make test-quick   # host checks + 构建 + usertests -q + tools + grind + modules
 make test         # 与 test-quick 相同，作为默认稳定入口
 make test-all     # test + crash
 ```
@@ -123,12 +124,16 @@ make test-all     # test + crash
 依次运行：
 
 ```bash
+python3 tools/check-tests.py
 make kernel/kernel fs.img
 ./test-xv6.py -q usertests
 ./test-xv6.py tools
+./test-xv6.py grind
 ./test-xv6.py modules
 ./test-xv6.py crash
 ```
+
+CI 使用 `cpus: [1, 3]` 矩阵，并在失败时上传 `test-xv6.out`。
 
 ## 7. 测试约定
 
@@ -154,14 +159,16 @@ make kernel/kernel fs.img
 
 内核自测：
 
-- `kernel_selftest`：通过 `module_call(KMOD_SELFTEST, 1, 0, 0)` 检查进程状态、
-  MLFQ 队列范围、优先级范围和内存可用性。
+- `SELFTEST_CMD_BASIC`：进程状态、MLFQ 队列、优先级和内存可用性。
+- `SELFTEST_CMD_REGISTRY`：模块 ID 唯一性和处理器完整性。
+- `SELFTEST_CMD_SIGNAL`：当前进程信号活动状态。
+- `SELFTEST_CMD_MEMORY`：COW 引用计数与共享内存段不变量。
 
 ## 8. 后续可扩展方向
 
 - 宿主机构建单元测试：覆盖无硬件依赖的纯逻辑。
 - 随机 syscall 压力测试：结合 QEMU 超时和崩溃检测。
-- 更多 CI 矩阵：多工具链、多 QEMU 版本、多 CPU 配置。
+- 更多 CI 矩阵：多工具链、多 QEMU 版本。
 
 ## 9. 相关文档
 

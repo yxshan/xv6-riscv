@@ -82,3 +82,18 @@ cow_handle(pagetable_t pagetable, uint64 va)
   cow_release(pa);
   return 0;
 }
+
+int
+cow_selftest(void)
+{
+  cow_init_once();
+  acquire(&cowlock);
+  for(int i = 0; i < NPHYS; i++){
+    if(cowref[i] < 0){
+      release(&cowlock);
+      return -1;
+    }
+  }
+  release(&cowlock);
+  return 0;
+}

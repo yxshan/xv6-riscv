@@ -251,9 +251,13 @@ qemu-gdb: $K/kernel .gdbinit fs.img
 print-gdbport:
 	@echo $(GDBPORT)
 
-test-quick: kernel/kernel fs.img
+host-test:
+	python3 tools/check-tests.py
+
+test-quick: kernel/kernel fs.img host-test
 	./test-xv6.py -q usertests
 	./test-xv6.py tools
+	./test-xv6.py grind
 	./test-xv6.py modules
 
 test: test-quick

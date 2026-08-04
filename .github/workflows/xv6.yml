@@ -7,8 +7,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cpus: [1, 3]
     env:
       TOOLPREFIX: riscv64-linux-gnu-
+      CPUS: ${{ matrix.cpus }}
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +23,9 @@ jobs:
             gcc-riscv64-linux-gnu \
             binutils-riscv64-linux-gnu \
             qemu-system-misc
+
+      - name: Host checks
+        run: python3 tools/check-tests.py
 
       - name: Build
         run: |
@@ -31,8 +38,18 @@ jobs:
       - name: Tool tests
         run: ./test-xv6.py tools
 
+      - name: Grind stress
+        run: ./test-xv6.py grind
+
       - name: Module tests
         run: ./test-xv6.py modules
 
       - name: Crash tests
         run: ./test-xv6.py crash
+
+      - name: Upload test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xv6-test-output
+          path: test-xv6.out

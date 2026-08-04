@@ -28,5 +28,8 @@
 
 // selftest 模块命令。
 #define SELFTEST_CMD_BASIC 1
+#define SELFTEST_CMD_REGISTRY 2
+#define SELFTEST_CMD_SIGNAL 3
+#define SELFTEST_CMD_MEMORY 4
 
 #endif
