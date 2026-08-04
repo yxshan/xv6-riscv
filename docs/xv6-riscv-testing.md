@@ -1,0 +1,128 @@
+# xv6-riscv 测试指南
+
+## 1. 测试分层
+
+当前测试分为四层：
+
+1. 用户态回归套件：`user/tests/`
+2. 独立测试程序：如 `cowtest`、`shmtest`、`signaltest`
+3. QEMU 主机自动化：`test-xv6.py`
+4. 崩溃恢复测试：`./test-xv6.py crash`
+
+## 2. 用户态回归套件
+
+`usertests` 不再是一个大文件，而是按子系统拆分的多个源文件：
+
+```text
+user/tests/
+  tests.h            # 公共头文件与 struct test
+  usertests.c        # 驱动：参数解析、quick/slow 执行
+  syscall_tests.c    # 参数安全与非法指针
+  mem_tests.c        # sbrk、惰性分配、内存边界
+  fs_tests.c         # 文件、目录、日志、inode
+  proc_tests.c       # fork、wait、exec、进程状态
+  module_tests.c     # FIFO、COW 等内核模块功能
+```
+
+每个测试文件提供两个测试数组：
+
+```c
+struct test mem_quicktests[] = {
+  {sbrkbasic, "sbrkbasic"},
+  {lazy_sbrk, "lazy_sbrk"},
+  { 0, 0},
+};
+
+struct test mem_slowtests[] = {
+  { 0, 0},
+};
+```
+
+驱动 [user/tests/usertests.c](../user/tests/usertests.c) 按套件顺序执行，
+保留原有命令：
+
+```text
+usertests            # 全部测试
+usertests -q         # 快速测试
+usertests -c         # 连续模式
+usertests -C         # 失败后继续
+usertests linktest   # 只运行指定测试
+```
+
+## 3. 新增用户态测试
+
+1. 在对应子系统的 `user/tests/*_tests.c` 中新增 `void foo(char *s)`。
+2. 把 `{foo, "foo"}` 加入该文件的 `quicktests` 或 `slowtests` 数组。
+3. 重新构建：
+
+```bash
+make user/_usertests
+make fs.img
+```
+
+4. 在 QEMU 中验证：
+
+```text
+usertests foo
+usertests -q
+```
+
+如果新测试不属于现有分类，可以新增 `user/tests/xxx_tests.c`，
+然后在 [tests.h](../user/tests/tests.h) 和
+[usertests.c](../user/tests/usertests.c) 的 `suites[]` 中登记。
+
+## 4. 独立测试程序
+
+适合单个模块的端到端验证，例如：
+
+- `cowtest`：写时复制 fork
+- `shmtest`：共享内存
+- `signaltest`：信号处理
+- `crashdump`：主动崩溃转储
+- `modload` / `modunload`：动态模块
+
+独立程序放在 `user/` 下，加入 `UPROGS` 后即可进入 `fs.img`。
+它们由 QEMU 中的 shell 或 `test-xv6.py` 调用。
+
+## 5. QEMU 主机自动化
+
+`test-xv6.py` 负责启动 QEMU、发送命令并匹配输出：
+
+```bash
+./test-xv6.py usertests        # 完整用户态回归
+./test-xv6.py -q usertests     # 快速回归
+./test-xv6.py crash            # 崩溃恢复测试
+```
+
+第一个参数同时支持正则匹配脚本中的 `test_*` 函数。
+新增 orchestrated 测试时，在 `test-xv6.py` 中添加：
+
+```python
+def test_cow():
+    q = QEMU(True)
+    q.cmd("cowtest\n")
+    q.monitor("^COW OK")
+    q.stop()
+```
+
+## 6. 测试约定
+
+- 每个测试函数在一个独立子进程中运行，失败时以非 0 状态退出。
+- 测试输出统一为 `test <name>: OK / FAILED`。
+- 允许故意触发内核 `usertrap` 错误信息，只要测试最终通过即可。
+- 涉及文件系统状态的测试应先清理旧文件，避免污染其他用例。
+- 提交前至少运行 `usertests -q`；涉及崩溃恢复时再运行 `./test-xv6.py crash`。
+
+## 7. 后续可扩展方向
+
+- 主机级 runner：为独立测试程序提供统一执行、超时和结果汇总。
+- 内核自测模块：通过模块注册表暴露内核内部状态检查。
+- 宿主机构建单元测试：覆盖无硬件依赖的纯逻辑。
+- 随机 syscall 压力测试：结合 QEMU 超时和崩溃检测。
+- GitHub Actions CI：自动构建并在每个提交上运行 QEMU 回归。
+
+## 8. 相关文档
+
+- [xv6-riscv-module-refinement.md](xv6-riscv-module-refinement.md)
+- [xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)
+- [../README.md](../README.md)

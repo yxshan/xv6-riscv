@@ -43,6 +43,10 @@ OBJS += $(KMOD_OBJS)
 UMOD_SRCS = $(wildcard $U/modules/*.c)
 UMOD_BINS = $(patsubst $U/modules/%.c,$U/_%,$(UMOD_SRCS))
 
+# 自动收集 user/tests 下的用户态测试套件，链接进 _usertests。
+UTEST_SRCS = $(wildcard $U/tests/*.c)
+UTEST_OBJS = $(patsubst %.c,%.o,$(UTEST_SRCS))
+
 DYNMOD_SRC = $K/modules/dynmod_sample.c
 DYNMOD_OBJ = $K/modules/dynmod_sample.o
 DYNMOD_ELF = $K/modules/dynmod_sample.elf
@@ -127,6 +131,14 @@ _%: %.o $(ULIB) $U/user.ld
 $U/%.o: $U/modules/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$U/tests/%.o: $U/tests/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$U/_usertests: $(UTEST_OBJS) $(ULIB) $U/user.ld
+	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $(UTEST_OBJS) $(ULIB)
+	$(OBJDUMP) -S $@ > $U/usertests.asm
+	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $U/usertests.sym
+
 $U/_%: $U/modules/%.o $(ULIB) $U/user.ld
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $*.asm
@@ -196,7 +208,7 @@ UPROGS=\
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN)
 	mkfs/mkfs fs.img README.md $(UPROGS) $(DYNMOD_BIN)
 
--include kernel/*.d kernel/module/*.d kernel/modules/*.d user/*.d user/modules/*.d
+-include kernel/*.d kernel/module/*.d kernel/modules/*.d user/*.d user/modules/*.d user/tests/*.d
 
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
@@ -204,6 +216,7 @@ clean:
 	kernel/module/*.o kernel/module/*.d \
 	kernel/modules/*.o kernel/modules/*.d \
 	user/modules/*.o user/modules/*.d $(UMOD_BINS) \
+	user/tests/*.o user/tests/*.d user/tests/*.asm user/tests/*.sym \
 	$(DYNMOD_OBJ) $(DYNMOD_ELF) $(DYNMOD_BIN) \
 	$K/kernel fs.img \
 	mkfs/mkfs .gdbinit \

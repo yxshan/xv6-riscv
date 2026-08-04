@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 
 - `kernel/`: RISC-V kernel C and `.S` sources, headers, and `kernel.ld`; `kernel/defs.h` declares cross-module functions.
-- `user/`: user programs and library; `user/foo.c` builds into `user/_foo` for `fs.img`.
+- `user/`: user programs and library; `user/foo.c` builds into `user/_foo` for `fs.img`. The `user/tests/` directory contains the split `usertests` suite.
 - `mkfs/mkfs.c`: host-side tool that builds the filesystem image.
 - Root: `Makefile`, `README.md`, `test-xv6.py`; technical docs live in `docs/`, including `xv6-riscv-source-analysis.md` and `xv6-riscv-extension-ideas.md`.
 
@@ -16,6 +16,7 @@ Requires a RISC-V newlib toolchain and `qemu-system-riscv64` 7.2+; override `TOO
 - `make fs.img`: rebuild the filesystem image.
 - `make qemu-gdb`: boot under a GDB stub; `make print-gdbport` prints the port.
 - `make clean`: remove build artifacts. `make tags`: regenerate etags.
+- `make user/_usertests`: build the split user-space test suite.
 - `./test-xv6.py usertests`: run the full in-guest suite; add `-q` for quick tests. `./test-xv6.py crash` runs crash-recovery tests. The first argument is a regex over the script's `test_*` functions.
 
 ## Coding Style & Naming Conventions
@@ -28,9 +29,9 @@ Requires a RISC-V newlib toolchain and `qemu-system-riscv64` 7.2+; override `TOO
 
 ## Testing Guidelines
 
-No unit-test framework exists; coverage lives in `user/usertests.c` and the QEMU harness `test-xv6.py`.
+No unit-test framework exists; coverage lives in `user/tests/`, standalone test programs, and the QEMU harness `test-xv6.py`. See [docs/xv6-riscv-testing.md](docs/xv6-riscv-testing.md) for the full testing guide.
 
-- Add `void foo(char *s)` to `user/usertests.c` and register it in `quicktests[]` or `slowtests[]`.
+- Add `void foo(char *s)` to the matching `user/tests/*_tests.c` and register it in that file's `quicktests[]` or `slowtests[]`.
 - Run one test from the xv6 shell with `usertests foo`.
 - Add orchestrated or crash checks as `test_foo()` functions in `test-xv6.py`.
 - Run `./test-xv6.py usertests` and `./test-xv6.py crash` before submitting.

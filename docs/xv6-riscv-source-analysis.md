@@ -1139,7 +1139,7 @@ int main(void) {
 | `init` | [init.c](../user/init.c) | 初始化进程 |
 | `zombie` | [zombie.c](../user/zombie.c) | 僵尸进程测试 |
 | `forktest` | [forktest.c](../user/forktest.c) | fork 压力测试 |
-| `usertests` | [usertests.c](../user/usertests.c) | 综合测试套件 (~65K) |
+| `usertests` | [user/tests](../user/tests) | 按子系统拆分的用户态回归套件 |
 | `grind` | [grind.c](../user/grind.c) | 随机系统调用压力测试 |
 | `stressfs` | [stressfs.c](../user/stressfs.c) | 文件系统压力测试 |
 | `logstress` | [logstress.c](../user/logstress.c) | 日志系统压力测试 |

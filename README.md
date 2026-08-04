@@ -34,6 +34,7 @@ kernel/
   modules/        静态与动态示例模块
   ...             内核核心源码
 user/
+  tests/           拆分后的用户态测试套件
   modules/        自动扫描的用户模块
   ...             用户程序与用户库
 mkfs/
@@ -186,6 +187,7 @@ KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
 - [xv6-riscv-module-architecture.md](docs/xv6-riscv-module-architecture.md)：模块架构
 - [xv6-riscv-module-priorities.md](docs/xv6-riscv-module-priorities.md)：模块方向与优先级
 - [xv6-riscv-module-refinement.md](docs/xv6-riscv-module-refinement.md)：现有模块完善批次
+- [xv6-riscv-testing.md](docs/xv6-riscv-testing.md)：测试架构与指南
 - [AGENTS.md](AGENTS.md)：贡献者指南
 
 ## 致谢

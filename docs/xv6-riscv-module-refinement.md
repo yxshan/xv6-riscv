@@ -56,7 +56,7 @@
 涉及文件：
 
 - `kernel/sysproc.c`
-- `user/usertests.c`
+- `user/tests/mem_tests.c`
 
 ### 测试与验证
 
