@@ -10,6 +10,7 @@ struct file {
   struct inode *ip;  // FD_INODE and FD_DEVICE
   uint off;          // FD_INODE
   short major;       // FD_DEVICE
+  void *devstate;    // FD_DEVICE: per-open private state
 };
 
 #define major(dev)  ((dev) >> 16 & 0xFFFF)

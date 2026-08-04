@@ -82,14 +82,26 @@ usertests -q
 
 ## 批次二：可观测性与伪文件系统
 
-状态：待完成
+状态：已完成
 
-计划内容：
+完成内容：
 
 - `strace` 按 `syscall.h` 全量统计，并输出系统调用名。
-- `/dev/stats` 支持通过设备文件重置计数，并输出逐系统调用明细。
-- `/proc` 与 `procinfo` 改为分页输出，避免进程多时静默截断。
-- 统一 `sysinfo.c` 与 `procfs.c` 中的进程格式化代码。
+- `/dev/stats` 支持通过设备文件写入重置计数，并输出逐系统调用明细。
+- `/proc` 使用每打开文件独立的缓冲和偏移，支持小缓冲多次读取。
+- `procinfo` 与 `procinfo_full` 测试覆盖进程多时输出不截断。
+- 新增 `kernel/syscall_names.h` 共享系统调用名称表。
+- 新增 `kernel/modules/proc_common.[ch]`，统一 `sysinfo` 与 `procfs` 格式化。
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests user/_strace user/_procinfo user/_ps fs.img
+usertests stats_reset
+usertests proc_chunked
+usertests procinfo_full
+usertests -q
+```
 
 ## 批次三：调度、信号与动态模块
 

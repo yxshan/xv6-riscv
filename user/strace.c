@@ -7,6 +7,13 @@
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/module/module_ids.h"
+#include "kernel/syscall.h"
+#include "kernel/syscall_names.h"
+
+#define STRACE_NAME(num, name) [num] = #name,
+static const char *syscall_names[] = {
+  SYSCALL_NAME_TABLE(STRACE_NAME)
+};
 
 static void
 usage(void)
@@ -47,10 +54,14 @@ main(int argc, char *argv[])
   printf("strace: syscalls=%d forks=%d exits=%d ticks=%d status=%d\n",
          (int)total, (int)forks, (int)exits, (int)ticks, status);
 
-  for(int i = 1; i <= 24; i++){
+  for(int i = 1; i < (int)(sizeof(syscall_names)/sizeof(syscall_names[0])); i++){
     uint64 n = module_call(KMOD_TRACE, TRACE_CMD_SYS, i, 0);
-    if(n > 0)
-      printf("  syscall %d: %d\n", i, (int)n);
+    if(n > 0){
+      if(syscall_names[i])
+        printf("  syscall %d (%s): %d\n", i, syscall_names[i], (int)n);
+      else
+        printf("  syscall %d: %d\n", i, (int)n);
+    }
   }
 
   exit(0);

@@ -13,6 +13,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 事件钩子机制：tick、syscall enter/exit、proc fork/exit
 - 完整设备文件接口：`open/read/write/close`
 - 伪设备：`/dev/sysinfo`、`/dev/stats`
+- `/proc` 支持小缓冲分页读取，进程多时不再截断
 - 教学级动态模块加载：`modload` / `modunload`
 - P0 工具：`strace`、`perf`、`prio`、`procinfo`
 - 进程优先级调度与 `setpriority`
@@ -81,13 +82,19 @@ setpriority(2, 10) = 0
 
 $ strace echo hi
 strace: syscalls=7 forks=1 exits=1 ticks=0 status=0
+  syscall 1 (fork): 1
+  syscall 2 (exit): 1
+  syscall 3 (wait): 1
+  syscall 7 (exec): 1
+  syscall 16 (write): 142
+  syscall 22 (module_call): 26
 
 $ perf echo hi
 perf: syscalls=7 ticks=0 forks=1 exits=1 free_pages=32529
 
 $ cat /dev/sysinfo
-proc 3
-mem 32533
+processes 3
+free_pages 32533
 ticks 113
 
 $ cat /dev/stats
@@ -95,6 +102,9 @@ syscalls 387
 forks 14
 exits 12
 ticks 352
+  1 fork 14
+  2 exit 12
+  16 write 387
 
 $ ln -s README.md link
 $ cat link

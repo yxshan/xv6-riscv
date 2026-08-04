@@ -21,7 +21,7 @@ user/tests/
   mem_tests.c        # sbrk、惰性分配、内存边界
   fs_tests.c         # 文件、目录、日志、inode
   proc_tests.c       # fork、wait、exec、进程状态
-  module_tests.c     # FIFO、COW 等内核模块功能
+  module_tests.c     # FIFO、COW、stats、/proc 等内核模块功能
 ```
 
 每个测试文件提供两个测试数组：
@@ -112,6 +112,12 @@ def test_cow():
 - 允许故意触发内核 `usertrap` 错误信息，只要测试最终通过即可。
 - 涉及文件系统状态的测试应先清理旧文件，避免污染其他用例。
 - 提交前至少运行 `usertests -q`；涉及崩溃恢复时再运行 `./test-xv6.py crash`。
+
+批次2新增回归用例：
+
+- `stats_reset`：验证 `/dev/stats` 写入后重置统计。
+- `proc_chunked`：验证 `/proc` 使用小缓冲多次读取。
+- `procinfo_full`：创建多个子进程后验证进程列表不截断。
 
 ## 7. 后续可扩展方向
 

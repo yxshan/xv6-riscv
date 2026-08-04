@@ -17,80 +17,7 @@
 #include "file.h"
 #include "module.h"
 #include "module_ids.h"
-
-static int
-fmt_uint(char *buf, int max, uint64 x)
-{
-  char tmp[24];
-  int i = 0;
-  int n = 0;
-
-  if(max <= 0)
-    return 0;
-  if(x == 0)
-    tmp[i++] = '0';
-  while(x > 0){
-    tmp[i++] = '0' + x % 10;
-    x /= 10;
-  }
-  while(i > 0 && n < max - 1)
-    buf[n++] = tmp[--i];
-  return n;
-}
-
-static int
-append_str(char *buf, int max, int off, const char *s)
-{
-  for(; *s && off < max - 1; off++)
-    buf[off] = *s++;
-  return off;
-}
-
-static int
-build_sysinfo(char *buf, int max)
-{
-  int off = 0;
-
-  off = append_str(buf, max, off, "proc ");
-  off += fmt_uint(buf + off, max - off, proccount());
-  off = append_str(buf, max, off, "\nmem ");
-  off += fmt_uint(buf + off, max - off, freemem() / PGSIZE);
-  off = append_str(buf, max, off, "\nticks ");
-  off += fmt_uint(buf + off, max - off, ticks);
-  off = append_str(buf, max, off, "\n");
-  return off;
-}
-
-static char *state_names[] = {
-  "unused", "used", "sleep", "runble", "run", "zombie"
-};
-
-static int
-build_proclist(char *buf, int max)
-{
-  extern struct proc proc[NPROC];
-  int off = 0;
-
-  for(struct proc *p = proc; p < &proc[NPROC]; p++){
-    acquire(&p->lock);
-    if(p->state != UNUSED){
-      off = append_str(buf, max, off, "pid ");
-      off += fmt_uint(buf + off, max - off, p->pid);
-      off = append_str(buf, max, off, " ");
-      if(p->state >= 0 && p->state < NELEM(state_names))
-        off = append_str(buf, max, off, state_names[p->state]);
-      off = append_str(buf, max, off, " prio ");
-      off += fmt_uint(buf + off, max - off, p->priority);
-      off = append_str(buf, max, off, " q ");
-      off += fmt_uint(buf + off, max - off, p->qlevel);
-      off = append_str(buf, max, off, " ");
-      off = append_str(buf, max, off, p->name);
-      off = append_str(buf, max, off, "\n");
-    }
-    release(&p->lock);
-  }
-  return off;
-}
+#include "proc_common.h"
 
 static int
 sysinfo_dev_open(struct file *f)
@@ -103,7 +30,7 @@ static int
 sysinfo_dev_read(struct file *f, int user_dst, uint64 dst, int n)
 {
   char buf[128];
-  int len = build_sysinfo(buf, sizeof(buf));
+  int len = kbuild_sysinfo(buf, sizeof(buf));
 
   if(f->off >= (uint)len)
     return 0;
@@ -162,12 +89,21 @@ sysinfo_handler(int cmd, uint64 arg0, uint64 arg1)
     return ticks;
   case SYSINFO_CMD_DUMP:
     {
-      char buf[1024];
-      int len = build_proclist(buf, sizeof(buf));
-      if(arg0 == 0 || arg1 < (uint64)len)
+      char *buf = kalloc();
+      int len;
+
+      if(buf == 0)
         return -1;
-      if(copyout(myproc()->pagetable, arg0, buf, len) < 0)
+      len = kbuild_proclist(buf, PGSIZE);
+      if(arg0 == 0 || arg1 < (uint64)len){
+        kfree(buf);
         return -1;
+      }
+      if(copyout(myproc()->pagetable, arg0, buf, len) < 0){
+        kfree(buf);
+        return -1;
+      }
+      kfree(buf);
       return len;
     }
   default:

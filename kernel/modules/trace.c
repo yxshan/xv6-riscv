@@ -15,6 +15,8 @@
 #include "file.h"
 #include "module.h"
 #include "module_ids.h"
+#include "syscall.h"
+#include "syscall_names.h"
 
 static struct spinlock trace_lock;
 static int total_syscalls;
@@ -22,6 +24,17 @@ static int syscall_counts[KMOD_MAX_SYSCOUNTS];
 static int fork_count;
 static int exit_count;
 static int tick_count;
+
+#define DEF_SYSNAME(num, name) [num] = #name,
+static const char *syscall_names[KMOD_MAX_SYSCOUNTS] = {
+  SYSCALL_NAME_TABLE(DEF_SYSNAME)
+};
+
+struct tracedev_state {
+  char *buf;
+  int len;
+  int pos;
+};
 
 static int
 fmt_uint(char *buf, int max, uint64 x)
@@ -51,57 +64,116 @@ append_str(char *buf, int max, int off, const char *s)
   return off;
 }
 
+static void
+trace_reset_locked(void)
+{
+  total_syscalls = 0;
+  fork_count = 0;
+  exit_count = 0;
+  tick_count = 0;
+  for(int i = 0; i < KMOD_MAX_SYSCOUNTS; i++)
+    syscall_counts[i] = 0;
+}
+
+static int
+trace_build(char *buf, int max)
+{
+  int off = 0;
+
+  acquire(&trace_lock);
+  off = append_str(buf, max, off, "syscalls ");
+  off += fmt_uint(buf + off, max - off, total_syscalls);
+  off = append_str(buf, max, off, "\nforks ");
+  off += fmt_uint(buf + off, max - off, fork_count);
+  off = append_str(buf, max, off, "\nexits ");
+  off += fmt_uint(buf + off, max - off, exit_count);
+  off = append_str(buf, max, off, "\nticks ");
+  off += fmt_uint(buf + off, max - off, tick_count);
+  off = append_str(buf, max, off, "\n");
+  for(int i = 1; i < KMOD_MAX_SYSCOUNTS; i++){
+    if(syscall_counts[i] == 0)
+      continue;
+    off = append_str(buf, max, off, "  ");
+    off += fmt_uint(buf + off, max - off, i);
+    off = append_str(buf, max, off, " ");
+    if(syscall_names[i])
+      off = append_str(buf, max, off, syscall_names[i]);
+    else
+      off += fmt_uint(buf + off, max - off, i);
+    off = append_str(buf, max, off, " ");
+    off += fmt_uint(buf + off, max - off, syscall_counts[i]);
+    off = append_str(buf, max, off, "\n");
+  }
+  release(&trace_lock);
+  return off;
+}
+
 static int
 trace_dev_open(struct file *f)
 {
-  f->off = 0;
+  struct tracedev_state *st;
+
+  f->devstate = 0;
+  st = (struct tracedev_state*)kalloc();
+  if(st == 0)
+    return -1;
+  st->buf = kalloc();
+  if(st->buf == 0){
+    kfree((void*)st);
+    return -1;
+  }
+  st->len = trace_build(st->buf, PGSIZE);
+  st->pos = 0;
+  f->devstate = st;
   return 0;
 }
 
 static int
 trace_dev_read(struct file *f, int user_dst, uint64 dst, int n)
 {
-  char buf[256];
-  int off = 0;
-  int len;
+  struct tracedev_state *st = (struct tracedev_state*)f->devstate;
 
-  acquire(&trace_lock);
-  off = append_str(buf, sizeof(buf), off, "syscalls ");
-  off += fmt_uint(buf + off, sizeof(buf) - off, total_syscalls);
-  off = append_str(buf, sizeof(buf), off, "\nforks ");
-  off += fmt_uint(buf + off, sizeof(buf) - off, fork_count);
-  off = append_str(buf, sizeof(buf), off, "\nexits ");
-  off += fmt_uint(buf + off, sizeof(buf) - off, exit_count);
-  off = append_str(buf, sizeof(buf), off, "\nticks ");
-  off += fmt_uint(buf + off, sizeof(buf) - off, tick_count);
-  off = append_str(buf, sizeof(buf), off, "\n");
-  len = off;
-  release(&trace_lock);
-
-  if(f->off >= (uint)len)
-    return 0;
-  if(n > len - (int)f->off)
-    n = len - (int)f->off;
-  if(either_copyout(user_dst, dst, buf + f->off, n) < 0)
+  if(st == 0)
     return -1;
-  f->off += n;
+  if(st->pos >= st->len)
+    return 0;
+  if(n > st->len - st->pos)
+    n = st->len - st->pos;
+  if(either_copyout(user_dst, dst, st->buf + st->pos, n) < 0)
+    return -1;
+  st->pos += n;
   return n;
 }
 
 static int
 trace_dev_write(struct file *f, int user_src, uint64 src, int n)
 {
-  (void)f;
+  struct tracedev_state *st = (struct tracedev_state*)f->devstate;
+
   (void)user_src;
   (void)src;
-  (void)n;
-  return -1;
+  if(f == 0 || n <= 0)
+    return -1;
+  acquire(&trace_lock);
+  trace_reset_locked();
+  release(&trace_lock);
+  if(st){
+    st->len = trace_build(st->buf, PGSIZE);
+    st->pos = 0;
+  }
+  return n;
 }
 
 static int
 trace_dev_close(struct file *f)
 {
-  (void)f;
+  struct tracedev_state *st = (struct tracedev_state*)f->devstate;
+
+  if(st){
+    if(st->buf)
+      kfree(st->buf);
+    kfree((void*)st);
+  }
   return 0;
 }
 
@@ -200,12 +272,7 @@ trace_handler(int cmd, uint64 arg0, uint64 arg1)
     return r;
   case TRACE_CMD_RESET:
     acquire(&trace_lock);
-    total_syscalls = 0;
-    fork_count = 0;
-    exit_count = 0;
-    tick_count = 0;
-    for(int i = 0; i < KMOD_MAX_SYSCOUNTS; i++)
-      syscall_counts[i] = 0;
+    trace_reset_locked();
     release(&trace_lock);
     return 0;
   default:
