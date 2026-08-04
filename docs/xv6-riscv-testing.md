@@ -8,6 +8,7 @@
 2. 独立测试程序：如 `cowtest`、`shmtest`、`signaltest`
 3. QEMU 主机自动化：`test-xv6.py`
 4. 崩溃恢复测试：`./test-xv6.py crash`
+5. 内核自测模块：`kernel/modules/selftest.c`
 
 ## 2. 用户态回归套件
 
@@ -91,6 +92,8 @@ usertests -q
 ```bash
 ./test-xv6.py usertests        # 完整用户态回归
 ./test-xv6.py -q usertests     # 快速回归
+./test-xv6.py tools            # 独立工具：cowtest/shmtest/signaltest/strace/ps
+./test-xv6.py modules          # 动态模块加载/调用/卸载
 ./test-xv6.py crash            # 崩溃恢复测试
 ```
 
@@ -105,7 +108,29 @@ def test_cow():
     q.stop()
 ```
 
-## 6. 测试约定
+也可以直接使用聚合入口：
+
+```bash
+make test-quick   # 构建 + usertests -q + tools + modules
+make test         # 与 test-quick 相同，作为默认稳定入口
+make test-all     # test + crash
+```
+
+## 6. CI
+
+仓库包含 [.github/workflows/xv6.yml](../.github/workflows/xv6.yml)，
+每次 `push` 或 `pull_request` 会在 Ubuntu 上安装 RISC-V 交叉工具链和 QEMU，
+依次运行：
+
+```bash
+make kernel/kernel fs.img
+./test-xv6.py -q usertests
+./test-xv6.py tools
+./test-xv6.py modules
+./test-xv6.py crash
+```
+
+## 7. 测试约定
 
 - 每个测试函数在一个独立子进程中运行，失败时以非 0 状态退出。
 - 测试输出统一为 `test <name>: OK / FAILED`。
@@ -127,15 +152,18 @@ def test_cow():
 - `dynmod_lifecycle`：动态模块加载后能执行卸载回调。
 - `prio_boost`：周期性提升后按优先级保持目标队列（慢测试）。
 
-## 7. 后续可扩展方向
+内核自测：
 
-- 主机级 runner：为独立测试程序提供统一执行、超时和结果汇总。
-- 内核自测模块：通过模块注册表暴露内核内部状态检查。
+- `kernel_selftest`：通过 `module_call(KMOD_SELFTEST, 1, 0, 0)` 检查进程状态、
+  MLFQ 队列范围、优先级范围和内存可用性。
+
+## 8. 后续可扩展方向
+
 - 宿主机构建单元测试：覆盖无硬件依赖的纯逻辑。
 - 随机 syscall 压力测试：结合 QEMU 超时和崩溃检测。
-- GitHub Actions CI：自动构建并在每个提交上运行 QEMU 回归。
+- 更多 CI 矩阵：多工具链、多 QEMU 版本、多 CPU 配置。
 
-## 8. 相关文档
+## 9. 相关文档
 
 - [xv6-riscv-module-refinement.md](xv6-riscv-module-refinement.md)
 - [xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

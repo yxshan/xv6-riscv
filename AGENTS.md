@@ -5,7 +5,7 @@
 - `kernel/`: RISC-V kernel C and `.S` sources, headers, and `kernel.ld`; `kernel/defs.h` declares cross-module functions.
 - `user/`: user programs and library; `user/foo.c` builds into `user/_foo` for `fs.img`. The `user/tests/` directory contains the split `usertests` suite.
 - `mkfs/mkfs.c`: host-side tool that builds the filesystem image.
-- Root: `Makefile`, `README.md`, `test-xv6.py`; technical docs live in `docs/`, including `xv6-riscv-source-analysis.md` and `xv6-riscv-extension-ideas.md`.
+- Root: `Makefile`, `README.md`, `test-xv6.py`; CI lives in `.github/workflows/xv6.yml`; technical docs live in `docs/`, including `xv6-riscv-source-analysis.md` and `xv6-riscv-extension-ideas.md`.
 
 ## Build, Test, and Development Commands
 
@@ -17,7 +17,12 @@ Requires a RISC-V newlib toolchain and `qemu-system-riscv64` 7.2+; override `TOO
 - `make qemu-gdb`: boot under a GDB stub; `make print-gdbport` prints the port.
 - `make clean`: remove build artifacts. `make tags`: regenerate etags.
 - `make user/_usertests`: build the split user-space test suite.
+- `make test-quick`: run `usertests -q`, standalone tool tests, and module lifecycle tests.
+- `make test`: run `test-quick` as the default stable entry point.
+- `make test-all`: run `test` plus crash-recovery tests.
 - `./test-xv6.py usertests`: run the full in-guest suite; add `-q` for quick tests. `./test-xv6.py crash` runs crash-recovery tests. The first argument is a regex over the script's `test_*` functions.
+- `./test-xv6.py tools`: run standalone tool checks (`cowtest`, `shmtest`, `signaltest`, `strace`, `ps`).
+- `./test-xv6.py modules`: run the dynamic module lifecycle checks.
 
 ## Coding Style & Naming Conventions
 
@@ -34,7 +39,7 @@ No unit-test framework exists; coverage lives in `user/tests/`, standalone test 
 - Add `void foo(char *s)` to the matching `user/tests/*_tests.c` and register it in that file's `quicktests[]` or `slowtests[]`.
 - Run one test from the xv6 shell with `usertests foo`.
 - Add orchestrated or crash checks as `test_foo()` functions in `test-xv6.py`.
-- Run `./test-xv6.py usertests` and `./test-xv6.py crash` before submitting.
+- Run `make test` (or at least `make test-quick`) before submitting.
 
 ## Adding New Code
 

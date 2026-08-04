@@ -5,6 +5,7 @@
 #define KMOD_SYSINFO 1
 #define KMOD_TRACE   2
 #define KMOD_DYN_SAMPLE 3
+#define KMOD_SELFTEST 4
 
 // sysinfo 设备主设备号（预留）。
 #define KMOD_SYSINFO_MAJOR 2
@@ -24,5 +25,8 @@
 #define TRACE_CMD_FORKS  4
 #define TRACE_CMD_EXITS  5
 #define TRACE_CMD_TICKS  6
+
+// selftest 模块命令。
+#define SELFTEST_CMD_BASIC 1
 
 #endif

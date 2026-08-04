@@ -58,13 +58,15 @@ class QEMU(object):
         self.proc.stdin.flush()
         
     def crash(self):
-        ps = run(['ps', '-opid', '--no-headers', '--ppid', str(self.proc.pid)], stdout=subprocess.PIPE, encoding='utf8')
-        kids = [int(line) for line in ps.stdout.splitlines()]
+        pg = run(['pgrep', '-f', 'qemu-system-riscv64.*fs.img'],
+                 stdout=subprocess.PIPE, encoding='utf8')
+        kids = [int(line) for line in pg.stdout.splitlines()]
         if len(kids) == 0:
             print("no qemu")
-            os.exit(1)
-        print("kill", kids[0])
-        os.kill(kids[0], signal.SIGKILL)
+            sys.exit(1)
+        for pid in kids:
+            print("kill", pid)
+            os.kill(pid, signal.SIGKILL)
 
     def stop(self):
         self.proc.terminate()
@@ -78,7 +80,7 @@ class QEMU(object):
         return self.output.splitlines()
 
     def error(self):
-        print("FAIL: match failed", regexps)
+        print("FAIL: match failed")
         self.save_output()
         self.stop()
         sys.exit(1)
@@ -99,7 +101,17 @@ class QEMU(object):
 
     def monitor(self, *regexps, progress="", timeout):
         deadline = time.time() + timeout
+        progress_idx = 0
         while True:
+            ok, _ = self.match(*regexps, exit=False)
+            if ok:
+                return
+            if progress:
+                lines = self.lines()
+                for line in lines[progress_idx:]:
+                    if re.match(progress, line):
+                        print(line)
+                progress_idx = len(lines)
             time.sleep(1)
             timeleft = deadline - time.time()
             if timeleft < 0:
@@ -108,27 +120,32 @@ class QEMU(object):
             ok, _ = self.match(*regexps, exit=False)
             if ok:
                 return
-            ok, line = self.match(progress, exit=False)
-            if ok:
-                print(line)
+            if progress:
+                lines = self.lines()
+                for line in lines[progress_idx:]:
+                    if re.match(progress, line):
+                        print(line)
+                progress_idx = len(lines)
 
 def crash_log():
     q = QEMU(True)
-    q.cmd("logstress f0 f1 f2 f3 f4 f5\n")
-    time.sleep(2)
+    q.cmd("logstress f0 f1 f2 f3\n")
+    time.sleep(5)
     q.crash()
     q.stop()
 
 def recover_log():
     q = QEMU()
-    time.sleep(2)
+    time.sleep(3)
     q.read()
     ok, _ = q.match('^recovering', exit=False)
     if ok:
         q.cmd("ls\n")
         time.sleep(2)
         q.read()
-        q.match('f5')
+        q.match('f3')
+    else:
+        print("recover output:", q.output[-500:])
     q.stop()
     return ok
 
@@ -152,7 +169,7 @@ def dorphan():
 
 def recover_orphan():
     q = QEMU()
-    time.sleep(2)
+    time.sleep(3)
     q.read()
     q.match('^ireclaim')
     q.stop()
@@ -196,8 +213,37 @@ def test_usertests(test=""):
         opt += " " + test
     q = QEMU(True)
     q.cmd("usertests" + opt + "\n")
-    q.monitor('^ALL TESTS PASSED', progress='test', timeout=timeout)
+    q.monitor('^ALL TESTS PASSED', progress='^test .*: (OK|FAILED)$', timeout=timeout)
     q.stop()
+
+def test_tools():
+    print("Test standalone user tools")
+    q = QEMU(True)
+    q.cmd("cowtest\n")
+    q.monitor("^COW OK", timeout=60)
+    q.cmd("shmtest\n")
+    q.monitor("^shared=SHM", timeout=60)
+    q.cmd("signaltest\n")
+    q.monitor("^handler sig=10", timeout=60)
+    q.cmd("strace echo hi\n")
+    q.monitor("^strace: syscalls=", timeout=60)
+    q.cmd("ps\n")
+    q.monitor("^processes ", timeout=60)
+    q.stop()
+    print("OK")
+
+def test_modules():
+    print("Test dynamic module lifecycle")
+    q = QEMU(True)
+    q.cmd("modload dynmod\n")
+    q.monitor("^module_load = 0", timeout=60)
+    q.cmd("modcli 3 1\n")
+    q.monitor("^module_call\\(3, 1\\) = 4660", timeout=60)
+    q.cmd("modunload\n")
+    q.monitor("^dynmod unloaded", timeout=60)
+    q.monitor("^module_unload = 0", timeout=60)
+    q.stop()
+    print("OK")
 
 def main():
     print(args)

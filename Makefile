@@ -251,6 +251,16 @@ qemu-gdb: $K/kernel .gdbinit fs.img
 print-gdbport:
 	@echo $(GDBPORT)
 
+test-quick: kernel/kernel fs.img
+	./test-xv6.py -q usertests
+	./test-xv6.py tools
+	./test-xv6.py modules
+
+test: test-quick
+
+test-all: test
+	./test-xv6.py crash
+
 QEMU_VERSION := $(shell $(QEMU) --version | head -n 1 | sed -E 's/^QEMU emulator version ([0-9]+\.[0-9]+)\..*/\1/')
 check-qemu-version:
 	@if [ "$(shell echo "$(QEMU_VERSION) >= $(MIN_QEMU_VERSION)" | bc)" -eq 0 ]; then \

@@ -333,6 +333,17 @@ dynmod_lifecycle(char *s)
   exit(0);
 }
 
+// 内核自测模块应能验证进程表与内存基本不变量。
+void
+kernel_selftest(char *s)
+{
+  if(module_call(KMOD_SELFTEST, SELFTEST_CMD_BASIC, 0, 0) != 0){
+    printf("%s: kernel selftest failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 
 struct test module_quicktests[] = {
   {fifo_rdwr, "fifo_rdwr"},
@@ -344,6 +355,7 @@ struct test module_quicktests[] = {
   {signal_ignore, "signal_ignore"},
   {signal_default, "signal_default"},
   {dynmod_lifecycle, "dynmod_lifecycle"},
+  {kernel_selftest, "kernel_selftest"},
   { 0, 0},
 };
 struct test module_slowtests[] = {

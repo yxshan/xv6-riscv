@@ -15,6 +15,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 伪设备：`/dev/sysinfo`、`/dev/stats`
 - `/proc` 支持小缓冲分页读取，进程多时不再截断
 - 教学级动态模块加载：`modload` / `modunload`
+- 内核自测模块：`kernel_selftest`
 - P0 工具：`strace`、`perf`、`prio`、`procinfo`
 - 进程优先级调度与 `setpriority`
 - MLFQ 多级反馈队列调度
@@ -64,8 +65,13 @@ make clean              # 清理构建产物
 自动化测试：
 
 ```bash
+make test-quick     # usertests -q + tools + modules
+make test           # 默认稳定测试入口
+make test-all       # test + crash
 ./test-xv6.py -q usertests
 ./test-xv6.py usertests
+./test-xv6.py tools
+./test-xv6.py modules
 ./test-xv6.py crash
 ```
 
