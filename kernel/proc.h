@@ -110,6 +110,7 @@ struct proc {
   uint64 sighandlers[NSIG];    // 用户信号处理函数
   uint64 sigpending;           // 待处理信号位图
   struct trapframe sigframe;   // 进入信号处理前保存的用户现场
+  int sigactive;               // 当前是否正在执行信号处理函数
 
   // 访问 parent 时必须持有 wait_lock：
   struct proc *parent;         // 父进程

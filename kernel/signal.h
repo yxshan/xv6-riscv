@@ -3,6 +3,9 @@
 
 #define NSIG 32
 
+#define SIG_DFL (-1UL)
+#define SIG_IGN (-2UL)
+
 #define SIGINT  2
 #define SIGKILL 9
 #define SIGUSR1 10

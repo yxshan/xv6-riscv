@@ -18,10 +18,11 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - P0 工具：`strace`、`perf`、`prio`、`procinfo`
 - 进程优先级调度与 `setpriority`
 - MLFQ 多级反馈队列调度
+- MLFQ 周期性提升按优先级恢复队列
 - 内核崩溃转储与栈回溯：`crashdump`
 - 共享内存：`shmget` / `shmat` / `shmdt` / `shmrm`
 - 写时复制 fork：`cowtest`
-- 信号机制：`signal` / `sigkill` / `sigreturn`
+- 信号机制：`signal` / `sigkill` / `sigreturn`，支持 `SIG_DFL` / `SIG_IGN` 与防重入
 - `/proc` 伪文件系统：`ps`、`cat proc`
 - 符号链接：`ln -s`
 - shell `&&` 短路执行
@@ -154,6 +155,7 @@ $ modcli 3 1
 module_call(3, 1) = 4660
 
 $ modunload
+dynmod unloaded
 module_unload = 0
 ```
 

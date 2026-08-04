@@ -3,6 +3,7 @@
 // 每个测试函数由 usertests 驱动在独立子进程中运行。
 #include "tests.h"
 #include "kernel/module/module_ids.h"
+#include "kernel/signal.h"
 
 void
 fifo_rdwr(char *s)
@@ -212,6 +213,126 @@ procinfo_full(char *s)
   exit(0);
 }
 
+static int in_handler;
+static int bad_reenter;
+
+static void
+reenter_handler(int sig)
+{
+  if(in_handler)
+    bad_reenter = 1;
+  in_handler = 1;
+  if(sig == SIGUSR1)
+    sigkill(getpid(), SIGUSR2);
+  in_handler = 0;
+  sigreturn();
+}
+
+// 信号处理期间不应重入；处理函数主动发新信号时应留到 sigreturn 后交付。
+void
+signal_no_reenter(char *s)
+{
+  if(signal(SIGUSR1, (uint64)reenter_handler) < 0 ||
+     signal(SIGUSR2, (uint64)reenter_handler) < 0){
+    printf("%s: signal failed\n", s);
+    exit(1);
+  }
+  if(sigkill(getpid(), SIGUSR1) < 0){
+    printf("%s: sigkill failed\n", s);
+    exit(1);
+  }
+  if(bad_reenter){
+    printf("%s: signal reentered handler\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// SIG_IGN 应清除待处理信号，进程继续正常运行。
+void
+signal_ignore(char *s)
+{
+  if(signal(SIGUSR1, SIG_IGN) < 0){
+    printf("%s: signal failed\n", s);
+    exit(1);
+  }
+  if(sigkill(getpid(), SIGUSR1) < 0){
+    printf("%s: sigkill failed\n", s);
+    exit(1);
+  }
+  pause(5);
+  exit(0);
+}
+
+// SIG_DFL 的默认动作是终止进程，子进程不应以 0 状态退出。
+void
+signal_default(char *s)
+{
+  int pid, st;
+
+  pid = fork();
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    if(signal(SIGUSR2, SIG_DFL) < 0)
+      exit(1);
+    if(sigkill(getpid(), SIGUSR2) < 0)
+      exit(1);
+    pause(100);
+    exit(0);
+  }
+  if(wait(&st) != pid || st == 0){
+    printf("%s: SIG_DFL did not terminate child\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// 动态模块应能在加载时注册卸载回调，并在 module_unload 时执行。
+void
+dynmod_lifecycle(char *s)
+{
+  struct stat st;
+  char *buf;
+  int fd, n;
+
+  fd = open("dynmod", O_RDONLY);
+  if(fd < 0 || fstat(fd, &st) < 0){
+    printf("%s: open dynmod failed\n", s);
+    exit(1);
+  }
+  if(st.size <= 0 || st.size > 16384){
+    printf("%s: bad dynmod size\n", s);
+    exit(1);
+  }
+  buf = malloc(st.size);
+  if(buf == 0){
+    printf("%s: malloc failed\n", s);
+    exit(1);
+  }
+  n = read(fd, buf, st.size);
+  close(fd);
+  if(n != st.size){
+    printf("%s: read dynmod failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  if(module_load((uint64)buf, st.size) != 0){
+    printf("%s: module_load failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  if(module_unload() != 0){
+    printf("%s: module_unload failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  free(buf);
+  exit(0);
+}
+
 
 struct test module_quicktests[] = {
   {fifo_rdwr, "fifo_rdwr"},
@@ -219,6 +340,10 @@ struct test module_quicktests[] = {
   {stats_reset, "stats_reset"},
   {proc_chunked, "proc_chunked"},
   {procinfo_full, "procinfo_full"},
+  {signal_no_reenter, "signal_no_reenter"},
+  {signal_ignore, "signal_ignore"},
+  {signal_default, "signal_default"},
+  {dynmod_lifecycle, "dynmod_lifecycle"},
   { 0, 0},
 };
 struct test module_slowtests[] = {

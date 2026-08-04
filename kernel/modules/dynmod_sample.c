@@ -7,6 +7,15 @@
 #include "dynmod.h"
 #include "module_ids.h"
 
+static int (*gprintf)(char *fmt, ...);
+
+static void
+dyn_exit_fn(void)
+{
+  if(gprintf)
+    gprintf("dynmod unloaded\n");
+}
+
 static kmod_u64
 dyn_handler(int cmd, kmod_u64 arg0, kmod_u64 arg1)
 {
@@ -27,7 +36,10 @@ __attribute__((section(".text.entry")))
 int
 module_entry(struct kmod_api *api)
 {
+  gprintf = api->printf;
   int r = api->module_register(KMOD_DYN_SAMPLE, "dynmod", dyn_handler);
+  if(r == 0 && api->module_exit_register(dyn_exit_fn) != 0)
+    r = -1;
   if(r == 0)
     api->printf("dynmod loaded\n");
   return r;

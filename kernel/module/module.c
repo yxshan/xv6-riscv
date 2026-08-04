@@ -35,6 +35,7 @@ static struct sysmod dynsys[KMOD_MAX_DYNAMIC];
 static struct spinlock dynlock;
 static int ndyn;
 static int dyn_loaded;
+static void (*dyn_exit)(void);
 
 static void
 sort_modules(void)
@@ -146,6 +147,21 @@ module_unregister(int id)
 }
 
 int
+module_exit_register(void (*exit_fn)(void))
+{
+  if(exit_fn == 0)
+    return -1;
+  acquire(&dynlock);
+  if(dyn_exit != 0){
+    release(&dynlock);
+    return -1;
+  }
+  dyn_exit = exit_fn;
+  release(&dynlock);
+  return 0;
+}
+
+int
 module_load(uint64 src, int len)
 {
   struct kmod_api api;
@@ -155,19 +171,30 @@ module_load(uint64 src, int len)
     return -1;
 
   memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
-  if(copyin(myproc()->pagetable, (char*)DYNMOD_BASE, src, len) < 0)
+  ndyn = 0;
+  dyn_exit = 0;
+  if(copyin(myproc()->pagetable, (char*)DYNMOD_BASE, src, len) < 0){
+    memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
     return -1;
+  }
 
   api.printf = printf;
   api.module_register = module_register;
   api.module_unregister = module_unregister;
+  api.module_exit_register = module_exit_register;
   api.proccount = proccount;
   api.freemem = freemem;
   api.ticks = ticks;
 
   r = ((int (*)(struct kmod_api*))DYNMOD_BASE)(&api);
-  if(r < 0)
+  if(r < 0){
+    acquire(&dynlock);
+    ndyn = 0;
+    release(&dynlock);
+    dyn_exit = 0;
+    memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
     return -1;
+  }
 
   dyn_loaded = 1;
   return 0;
@@ -179,9 +206,12 @@ module_unload(void)
   if(!dyn_loaded)
     return -1;
 
+  if(dyn_exit)
+    dyn_exit();
   acquire(&dynlock);
   ndyn = 0;
   release(&dynlock);
+  dyn_exit = 0;
   dyn_loaded = 0;
   memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
   return 0;

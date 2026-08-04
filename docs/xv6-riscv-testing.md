@@ -119,6 +119,14 @@ def test_cow():
 - `proc_chunked`：验证 `/proc` 使用小缓冲多次读取。
 - `procinfo_full`：创建多个子进程后验证进程列表不截断。
 
+批次3新增回归用例：
+
+- `signal_no_reenter`：信号处理期间不重入，新信号在 `sigreturn` 后交付。
+- `signal_ignore`：`SIG_IGN` 不终止进程。
+- `signal_default`：`SIG_DFL` 默认终止进程。
+- `dynmod_lifecycle`：动态模块加载后能执行卸载回调。
+- `prio_boost`：周期性提升后按优先级保持目标队列（慢测试）。
+
 ## 7. 后续可扩展方向
 
 - 主机级 runner：为独立测试程序提供统一执行、超时和结果汇总。

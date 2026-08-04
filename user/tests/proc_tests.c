@@ -2,6 +2,8 @@
 //
 // 每个测试函数由 usertests 驱动在独立子进程中运行。
 #include "tests.h"
+#include "kernel/module/module_ids.h"
+
 void
 exectest(char *s)
 {
@@ -514,6 +516,76 @@ execout(char *s)
   exit(0);
 }
 
+static int
+parse_int_at(char *buf, int i, int n)
+{
+  int v = 0;
+
+  while(i < n && buf[i] >= '0' && buf[i] <= '9'){
+    v = v * 10 + buf[i] - '0';
+    i++;
+  }
+  return v;
+}
+
+static int
+find_proc_q(char *buf, int n, int pid, int *q)
+{
+  for(int i = 0; i + 4 < n; i++){
+    if(buf[i] != 'p' || buf[i+1] != 'i' || buf[i+2] != 'd' || buf[i+3] != ' ')
+      continue;
+    int p = parse_int_at(buf, i + 4, n);
+    if(p != pid)
+      continue;
+    for(int k = i; k + 3 < n; k++){
+      if(buf[k] == ' ' && buf[k+1] == 'q' && buf[k+2] == ' '){
+        *q = parse_int_at(buf, k + 3, n);
+        return 1;
+      }
+    }
+    return 0;
+  }
+  return 0;
+}
+
+// 周期性提升应按静态优先级重新计算队列，而不是把所有进程重置到队列 0。
+void
+prio_boost(char *s)
+{
+  int me = getpid();
+  char *buf = malloc(4096);
+  int n, q;
+
+  if(buf == 0){
+    printf("%s: malloc failed\n", s);
+    exit(1);
+  }
+  if(setpriority(me, 200) < 0){
+    printf("%s: setpriority failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  // 跨越 100 tick 的周期性提升窗口。
+  if(pause(120) < 0){
+    printf("%s: pause failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  n = (int)module_call(KMOD_SYSINFO, SYSINFO_CMD_DUMP, (uint64)buf, 4096);
+  if(n < 0 || !find_proc_q(buf, n, me, &q)){
+    printf("%s: cannot find proc qlevel\n", s);
+    free(buf);
+    exit(1);
+  }
+  if(q != 2){
+    printf("%s: boost reset priority queue to %d\n", s, q);
+    free(buf);
+    exit(1);
+  }
+  free(buf);
+  exit(0);
+}
+
 // can the kernel tolerate running out of disk space?
 
 struct test proc_quicktests[] = {
@@ -534,5 +606,6 @@ struct test proc_quicktests[] = {
 };
 struct test proc_slowtests[] = {
   {execout, "execout"},
+  {prio_boost, "prio_boost"},
   { 0, 0},
 };

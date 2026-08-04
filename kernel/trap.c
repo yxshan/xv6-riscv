@@ -47,10 +47,26 @@ deliver_signal(struct proc *p)
 {
   for(int sig = 1; sig < NSIG; sig++){
     uint64 h = p->sighandlers[sig];
-    if((p->sigpending & (1UL << sig)) && h){
+    if((p->sigpending & (1UL << sig)) == 0 || h == 0)
+      continue;
+    // handler + 16 存储：2 表示 SIG_DFL，3 表示 SIG_IGN。
+    if(h == 3){
       p->sigpending &= ~(1UL << sig);
+      continue;
+    }
+    if(h == 2){
+      p->sigpending &= ~(1UL << sig);
+      p->killed = 1;
+      continue;
+    }
+    // 信号处理函数执行期间不再重入，新信号留到 sigreturn 后交付。
+    if(p->sigactive)
+      continue;
+    {
+      p->sigpending &= ~(1UL << sig);
+      p->sigactive = 1;
       p->sigframe = *p->trapframe;
-      p->trapframe->epc = h - 1;
+      p->trapframe->epc = h - 16;
       p->trapframe->a0 = sig;
       return;
     }
@@ -115,6 +131,9 @@ usertrap(void)
     yield();
 
   deliver_signal(p);
+
+  if(killed(p))
+    kexit(-1);
 
   prepare_return();
 

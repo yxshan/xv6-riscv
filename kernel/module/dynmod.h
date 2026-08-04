@@ -10,11 +10,13 @@
 typedef unsigned long kmod_u64;
 
 typedef kmod_u64 (*kmod_handler_t)(int cmd, kmod_u64 arg0, kmod_u64 arg1);
+typedef void (*kmod_exit_t)(void);
 
 struct kmod_api {
   int (*printf)(char *fmt, ...);
   int (*module_register)(int id, const char *name, kmod_handler_t handler);
   int (*module_unregister)(int id);
+  int (*module_exit_register)(kmod_exit_t exit_fn);
   int (*proccount)(void);
   kmod_u64 (*freemem)(void);
   kmod_u64 ticks;

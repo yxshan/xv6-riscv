@@ -105,13 +105,26 @@ usertests -q
 
 ## 批次三：调度、信号与动态模块
 
-状态：待完成
+状态：已完成
 
-计划内容：
+完成内容：
 
 - MLFQ 周期性提升时按优先级重新计算队列，而不是无差别重置到队列 0。
-- 信号补充处理期间防重入、默认动作与 `sigreturn` 校验。
-- 动态模块增加卸载回调与加载失败回滚，完善生命周期。
+- 信号支持 `SIG_DFL` / `SIG_IGN`，处理期间防重入，`sigreturn` 校验活动状态。
+- 动态模块增加卸载回调和加载失败回滚。
+- 新增测试：`prio_boost`、`signal_no_reenter`、`signal_ignore`、`signal_default`、`dynmod_lifecycle`。
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests dynmod fs.img
+usertests signal_no_reenter
+usertests signal_ignore
+usertests signal_default
+usertests dynmod_lifecycle
+usertests prio_boost
+usertests -q
+```
 
 ## 文档入口
 

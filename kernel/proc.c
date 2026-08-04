@@ -147,6 +147,9 @@ found:
   p->priority = 50;
   p->qlevel = 0;
   p->qticks = 0;
+  p->sigpending = 0;
+  p->sigactive = 0;
+  memset(p->sighandlers, 0, sizeof(p->sighandlers));
   p->state = USED;
 
   // 分配保存用户寄存器现场的 trapframe 页面。
@@ -191,6 +194,8 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->sigpending = 0;
+  p->sigactive = 0;
   p->state = UNUSED;
 }
 
@@ -549,8 +554,13 @@ ksignal(int sig, uint64 handler)
   if(sig <= 0 || sig >= NSIG)
     return -1;
   acquire(&p->lock);
-  // 用户程序从地址 0 开始，因此用 handler+1 表示“已设置”。
-  p->sighandlers[sig] = handler + 1;
+  if(handler == SIG_DFL)
+    p->sighandlers[sig] = 2;
+  else if(handler == SIG_IGN)
+    p->sighandlers[sig] = 3;
+  else
+    // 用户程序从地址 0 开始；用 handler+16 编码普通处理函数。
+    p->sighandlers[sig] = handler + 16;
   release(&p->lock);
   return 0;
 }
@@ -572,9 +582,16 @@ ksigkill(int pid, int sig)
         if(p->state == SLEEPING)
           p->state = RUNNABLE;
       } else {
-        p->sigpending |= (1UL << sig);
-        if(p->state == SLEEPING)
-          p->state = RUNNABLE;
+        // 未设置处理函数或显式 SIG_DFL 时，默认动作是终止进程。
+        if(p->sighandlers[sig] == 0 || p->sighandlers[sig] == 2){
+          p->killed = 1;
+          if(p->state == SLEEPING)
+            p->state = RUNNABLE;
+        } else if(p->sighandlers[sig] != 3){
+          p->sigpending |= (1UL << sig);
+          if(p->state == SLEEPING)
+            p->state = RUNNABLE;
+        }
       }
       release(&p->lock);
       return 0;
@@ -608,21 +625,30 @@ sys_sigreturn(void)
 {
   struct proc *p = myproc();
 
+  if(!p->sigactive)
+    return -1;
   // 恢复进入信号处理前保存的用户现场。
   *p->trapframe = p->sigframe;
+  p->sigactive = 0;
   return 0;
 }
 
-// 周期性优先级提升：把所有非 UNUSED 进程提升到最高队列。
+// 周期性优先级提升：按进程静态优先级重新计算目标队列，
+// 只提升因时间片用尽而降级的进程，不把高优先级任务重置到低队列。
 void
 mlfq_boost(void)
 {
   struct proc *p;
+  int target;
 
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->state != UNUSED){
-      p->qlevel = 0;
+      target = p->priority / 64;
+      if(target >= MLFQ_NQUEUES)
+        target = MLFQ_NQUEUES - 1;
+      if(p->qlevel > target)
+        p->qlevel = target;
       p->qticks = 0;
     }
     release(&p->lock);
