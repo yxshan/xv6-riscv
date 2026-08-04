@@ -187,8 +187,8 @@ UPROGS=\
 	$U/_procinfo\
 	$(UMOD_BINS)\
 
-fs.img: mkfs/mkfs README $(UPROGS) $(DYNMOD_BIN)
-	mkfs/mkfs fs.img README $(UPROGS) $(DYNMOD_BIN)
+fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN)
+	mkfs/mkfs fs.img README.md $(UPROGS) $(DYNMOD_BIN)
 
 -include kernel/*.d kernel/module/*.d kernel/modules/*.d user/*.d user/modules/*.d
 

@@ -88,7 +88,7 @@ forks 14
 exits 12
 ticks 352
 
-$ ln -s README link
+$ ln -s README.md link
 $ cat link
 xv6 is a re-implementation...
 
