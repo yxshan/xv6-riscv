@@ -26,6 +26,7 @@ main(void)
   // 创建模块伪设备节点；若镜像中已存在则忽略失败。
   mknod("sysinfo", KMOD_SYSINFO_MAJOR, 0);
   mknod("stats", KMOD_TRACE_MAJOR, 0);
+  mknod("proc", KMOD_PROC_MAJOR, 0);
   dup(0);  // stdout
   dup(0);  // stderr
 

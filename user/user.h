@@ -29,6 +29,15 @@ int module_load(uint64, int);
 int module_unload(void);
 int setpriority(int, int);
 int symlink(const char*, const char*);
+int mkfifo(const char*, int);
+int dumpstate(void);
+int shmget(int, int);
+uint64 shmat(int);
+int shmdt(int);
+int shmrm(int);
+int signal(int, uint64);
+int sigkill(int, int);
+void sigreturn(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

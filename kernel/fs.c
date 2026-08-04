@@ -356,6 +356,10 @@ iput(struct inode *ip)
 
     release(&itable.lock);
 
+    if(ip->fifo){
+      kfree(ip->fifo);
+      ip->fifo = 0;
+    }
     itrunc(ip);
     ip->type = 0;
     iupdate(ip);

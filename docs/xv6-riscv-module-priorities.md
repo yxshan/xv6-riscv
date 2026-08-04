@@ -171,6 +171,20 @@
 6. 信号机制
 7. 崩溃转储
 
+### P1 当前状态
+
+以下 P1 项目已经完成并通过 QEMU 验证：
+
+- 命名管道 FIFO：`mkfifo` + `FD_FIFO`
+- MLFQ 调度：三级队列、时间片降级、周期提升
+- 崩溃转储：`crashdump`、栈回溯、panic 自动转储
+- 共享内存：`shmget` / `shmat` / `shmdt` / `shmrm`
+- 写时复制 fork：`cowtest`
+- 信号机制：`signal` / `sigkill` / `sigreturn`
+- `/proc` 伪文件系统：`ps`、`cat proc`
+
+P1 剩余项已全部完成。
+
 ### P2：进阶方向
 
 适合已经熟悉 xv6 核心后继续深入：

@@ -24,6 +24,7 @@ struct pipe {
   uint nwrite;    // 已写字节数
   int readopen;   // 读端文件描述符是否仍打开
   int writeopen;  // 写端文件描述符是否仍打开
+  int fifo;       // 是否命名管道
 };
 
 // 分配一个管道：创建 pipe 结构，并把它包装成一对文件对象
@@ -41,6 +42,7 @@ pipealloc(struct file **f0, struct file **f1)
     goto bad;
   pi->readopen = 1;
   pi->writeopen = 1;
+  pi->fifo = 0;
   pi->nwrite = 0;
   pi->nread = 0;
   initlock(&pi->lock, "pipe");
@@ -62,6 +64,56 @@ pipealloc(struct file **f0, struct file **f1)
   if(*f1)
     fileclose(*f1);
   return -1;
+}
+
+// 为命名管道分配一个独立的 pipe 对象。
+// 初始时读写端计数都为 0，由后续 open 递增。
+struct pipe*
+fifoalloc(void)
+{
+  struct pipe *pi = (struct pipe*)kalloc();
+
+  if(pi == 0)
+    return 0;
+  pi->readopen = 0;
+  pi->writeopen = 0;
+  pi->fifo = 1;
+  pi->nread = 0;
+  pi->nwrite = 0;
+  initlock(&pi->lock, "fifo");
+  return pi;
+}
+
+// 记录 FIFO 新打开了一个读端和/或写端。
+void
+fifo_open(struct pipe *pi, int read, int write)
+{
+  acquire(&pi->lock);
+  if(read)
+    pi->readopen++;
+  if(write)
+    pi->writeopen++;
+  wakeup(&pi->nread);
+  wakeup(&pi->nwrite);
+  release(&pi->lock);
+}
+
+// 关闭一个命名管道端。与匿名管道不同，FIFO 的 pipe 对象
+// 属于 inode，不在这里释放，而是在 inode 销毁时释放。
+void
+fifo_close(struct pipe *pi, int writable)
+{
+  acquire(&pi->lock);
+  if(writable){
+    if(pi->writeopen > 0)
+      pi->writeopen--;
+    wakeup(&pi->nread);
+  } else {
+    if(pi->readopen > 0)
+      pi->readopen--;
+    wakeup(&pi->nwrite);
+  }
+  release(&pi->lock);
 }
 
 void
@@ -92,7 +144,17 @@ pipewrite(struct pipe *pi, uint64 addr, int n)
   acquire(&pi->lock);
   while(i < n){
     // 读端已关闭：继续写没有意义；进程被 kill 时也要退出。
-    if(pi->readopen == 0 || killed(pr)){
+    if(killed(pr)){
+      release(&pi->lock);
+      return -1;
+    }
+    if(pi->readopen == 0){
+      if(pi->fifo){
+        // FIFO 写端等待读端打开。
+        wakeup(&pi->nread);
+        sleep(&pi->nwrite, &pi->lock);
+        continue;
+      }
       release(&pi->lock);
       return -1;
     }
@@ -123,12 +185,20 @@ piperead(struct pipe *pi, uint64 addr, int n)
   char ch;
 
   acquire(&pi->lock);
-  while(pi->nread == pi->nwrite && pi->writeopen){  //DOC: pipe-empty
+  while(pi->nread == pi->nwrite){  //DOC: pipe-empty
     // 管道为空且写端仍打开：睡眠等待写端写入或关闭。
     if(killed(pr)){
       release(&pi->lock);
       return -1;
     }
+    if(pi->writeopen == 0 && pi->fifo){
+      // FIFO 读端等待写端打开。
+      wakeup(&pi->nwrite);
+      sleep(&pi->nread, &pi->lock);
+      continue;
+    }
+    if(pi->writeopen == 0)
+      break;
     sleep(&pi->nread, &pi->lock); //DOC: piperead-sleep
   }
   for(i = 0; i < n; i++){  //DOC: piperead-copy

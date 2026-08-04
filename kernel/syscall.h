@@ -27,3 +27,12 @@
 #define SYS_module_unload 24
 #define SYS_setpriority 25
 #define SYS_symlink 26
+#define SYS_mkfifo 27
+#define SYS_dumpstate 28
+#define SYS_shmget 29
+#define SYS_shmat 30
+#define SYS_shmdt 31
+#define SYS_shmrm 32
+#define SYS_signal 33
+#define SYS_sigkill 34
+#define SYS_sigreturn 35

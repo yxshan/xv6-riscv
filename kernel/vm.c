@@ -210,9 +210,12 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       continue;   
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
       continue;
-    if(do_free){
+    if(do_free && (*pte & PTE_SHM) == 0){
       uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+      if(*pte & PTE_COW)
+        cow_release(pa);
+      else
+        kfree((void*)pa);
     }
     *pte = 0;
   }
@@ -311,12 +314,58 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       continue;   // 物理页尚未分配，跳过
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
+    if(flags & PTE_SHM){
+      // 共享页：子进程直接映射同一物理页，不复制内容。
+      shm_addref_pa(pa);
+      if(mappages(new, i, PGSIZE, pa, flags) != 0){
+        shm_subref_pa(pa);
+        goto err;
+      }
+      continue;
+    }
+    if(flags & PTE_COW){
+      // 已经是 COW 页：继续共享同一物理页。
+      cow_add(pa);
+      if(mappages(new, i, PGSIZE, pa, flags) != 0){
+        cow_release(pa);
+        goto err;
+      }
+      continue;
+    }
+    if(flags & PTE_W){
+      // 可写页转为 COW：父进程与子进程都变成只读共享。
+      *pte = (*pte & ~PTE_W) | PTE_COW;
+      flags = PTE_FLAGS(*pte);
+      cow_add(pa); // 父进程引用
+      cow_add(pa);
+      // 子进程引用
+      if(mappages(new, i, PGSIZE, pa, flags) != 0){
+        cow_release(pa);
+        goto err;
+      }
+      continue;
+    }
     if((mem = kalloc()) == 0)
       goto err;
     // 复制整页内容，保持父子进程数据互不影响。
     memmove(mem, (char*)pa, PGSIZE);
     if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
       kfree(mem);
+      goto err;
+    }
+  }
+
+  // 共享内存映射在用户堆大小之外，fork 时必须单独复制。
+  for(i = SHM_BASE; i < TRAPFRAME; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      continue;
+    if((*pte & PTE_SHM) == 0)
+      continue;
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    shm_addref_pa(pa);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      shm_subref_pa(pa);
       goto err;
     }
   }
@@ -363,9 +412,15 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     }
 
     pte = walk(pagetable, va0, 0);
-    // 禁止内核向用户只读代码页写数据。
-    if((*pte & PTE_W) == 0)
-      return -1;
+    // 禁止内核向用户只读代码页写数据；
+    // COW 页则先复制并转为可写。
+    if((*pte & PTE_W) == 0){
+      if((*pte & PTE_COW) && cow_handle(pagetable, va0) == 0){
+        pte = walk(pagetable, va0, 0);
+        pa0 = PTE2PA(*pte);
+      } else
+        return -1;
+    }
       
     n = PGSIZE - (dstva - va0);
     if(n > len)

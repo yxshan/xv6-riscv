@@ -1,4 +1,5 @@
 // 内核上下文切换时保存的寄存器集合。
+#include "signal.h"
 // ra 保存切换后的返回地址，sp 保存内核栈指针；
 // s0-s11 是 callee-saved 寄存器，调用者不负责保留它们，
 // 所以上下文切换必须显式保存和恢复。
@@ -87,6 +88,12 @@ struct trapframe {
 // ZOMBIE 进程保留 PCB，直到父进程 wait() 回收。
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+// MLFQ 队列数量与各队列时间片（时钟 tick 数）。
+#define MLFQ_NQUEUES 3
+#define MLFQ_SLICE0 2
+#define MLFQ_SLICE1 4
+#define MLFQ_SLICE2 8
+
 // 每个进程的完整状态（进程控制块 PCB）。
 struct proc {
   struct spinlock lock;
@@ -98,6 +105,11 @@ struct proc {
   int xstate;                  // 退出状态，等待父进程 wait() 读取
   int pid;                     // Process ID
   int priority;                // 调度优先级，0 最高，255 最低
+  int qlevel;                  // MLFQ 当前队列，0 最高
+  int qticks;                  // 当前队列已运行 tick 数
+  uint64 sighandlers[NSIG];    // 用户信号处理函数
+  uint64 sigpending;           // 待处理信号位图
+  struct trapframe sigframe;   // 进入信号处理前保存的用户现场
 
   // 访问 parent 时必须持有 wait_lock：
   struct proc *parent;         // 父进程

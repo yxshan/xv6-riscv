@@ -16,8 +16,15 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 教学级动态模块加载：`modload` / `modunload`
 - P0 工具：`strace`、`perf`、`prio`、`procinfo`
 - 进程优先级调度与 `setpriority`
+- MLFQ 多级反馈队列调度
+- 内核崩溃转储与栈回溯：`crashdump`
+- 共享内存：`shmget` / `shmat` / `shmdt` / `shmrm`
+- 写时复制 fork：`cowtest`
+- 信号机制：`signal` / `sigkill` / `sigreturn`
+- `/proc` 伪文件系统：`ps`、`cat proc`
 - 符号链接：`ln -s`
 - shell `&&` 短路执行
+- 命名管道 FIFO：`mkfifo`
 
 ## 目录结构
 
@@ -95,6 +102,34 @@ xv6 is a re-implementation...
 $ echo one && echo two
 one
 two
+
+$ mkfifo fifo
+$ cat fifo &
+$ echo hello > fifo
+hello
+
+$ crashdump
+=== kernel crash dump ===
+pid=3 name=crashdump
+backtrace:
+  8000689a
+
+$ shmtest
+shared=SHM
+
+$ cowtest
+parent=before
+COW OK
+
+$ signaltest
+handler sig=10
+signaltest: after
+
+$ ps
+processes 3
+free_pages 32490
+ticks 60
+pid 1 sleep prio 50 q 0 init
 ```
 
 动态模块示例：

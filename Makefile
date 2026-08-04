@@ -185,6 +185,12 @@ UPROGS=\
 	$U/_perf\
 	$U/_prio\
 	$U/_procinfo\
+	$U/_mkfifo\
+	$U/_crashdump\
+	$U/_shmtest\
+	$U/_cowtest\
+	$U/_signaltest\
+	$U/_ps\
 	$(UMOD_BINS)\
 
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN)

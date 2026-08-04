@@ -113,6 +113,15 @@ extern uint64 sys_module_load(void);
 extern uint64 sys_module_unload(void);
 extern uint64 sys_setpriority(void);
 extern uint64 sys_symlink(void);
+extern uint64 sys_mkfifo(void);
+extern uint64 sys_dumpstate(void);
+extern uint64 sys_shmget(void);
+extern uint64 sys_shmat(void);
+extern uint64 sys_shmdt(void);
+extern uint64 sys_shmrm(void);
+extern uint64 sys_signal(void);
+extern uint64 sys_sigkill(void);
+extern uint64 sys_sigreturn(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -143,6 +152,15 @@ static uint64 (*syscalls[])(void) = {
 [SYS_module_unload] sys_module_unload,
 [SYS_setpriority] sys_setpriority,
 [SYS_symlink] sys_symlink,
+[SYS_mkfifo] sys_mkfifo,
+[SYS_dumpstate] sys_dumpstate,
+[SYS_shmget] sys_shmget,
+[SYS_shmat] sys_shmat,
+[SYS_shmdt] sys_shmdt,
+[SYS_shmrm] sys_shmrm,
+[SYS_signal] sys_signal,
+[SYS_sigkill] sys_sigkill,
+[SYS_sigreturn] sys_sigreturn,
 };
 
 void
@@ -157,7 +175,10 @@ syscall(void)
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     // 查表调用对应的内核实现，返回值写入 a0，
     // 用户态从 ecall 返回后就能通过寄存器读到结果。
-    p->trapframe->a0 = syscalls[num]();
+    uint64 ret = syscalls[num]();
+    // sigreturn 会恢复整个用户现场，不能覆盖 a0。
+    if(num != SYS_sigreturn)
+      p->trapframe->a0 = ret;
   } else {
     // 编号非法：打印提示并把返回值置为 -1。
     printf("%d %s: unknown sys call %d\n",

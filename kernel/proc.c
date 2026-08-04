@@ -3,9 +3,8 @@
 // proc 数组是全局进程表，每个槽位对应一个 struct proc；
 // 每把 CPU 也有自己的 cpus[] 结构，记录当前正在运行的进程和调度上下文。
 //
-// 调度采用最简单的 round-robin：scheduler() 在进程表中循环查找
-// RUNNABLE 进程，通过 swtch() 切换内核栈和寄存器，进入该进程；
-// 进程主动让出 CPU、等待资源或收到时钟中断时，再通过 sched() 切回调度器。
+// 调度采用多级反馈队列 (MLFQ)：高队列优先，时间片用尽后降级；
+// 周期性地把所有进程提升回最高队列，避免低队列饥饿。
 #include "types.h"
 #include "param.h"
 #include "memlayout.h"
@@ -31,6 +30,9 @@ extern char trampoline[]; // trampoline.S
 // wait_lock 保护 parent 字段，并确保 wait() 中的父进程不会错过
 // 子进程退出时的 wakeup()。访问 p->parent 前必须先获取 wait_lock。
 struct spinlock wait_lock;
+
+// 每队列轮转起点，用于在同一队列内实现 round-robin。
+static int rr[MLFQ_NQUEUES];
 
 // 为进程表中的每个进程预分配一个内核栈页面，
 // 并映射到高地址区域，栈下方留无效保护页。
@@ -143,6 +145,8 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->priority = 50;
+  p->qlevel = 0;
+  p->qticks = 0;
   p->state = USED;
 
   // 分配保存用户寄存器现场的 trapframe 页面。
@@ -226,6 +230,8 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
+  // 先解除共享内存映射，避免 uvmfree 释放共享物理页。
+  shm_release_pagetable(pagetable);
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
@@ -259,7 +265,7 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
-    if(sz + n > TRAPFRAME) {
+    if(sz + n > SHM_BASE) {
       return -1;
     }
     if((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
@@ -309,6 +315,8 @@ kfork(void)
 
   safestrcpy(np->name, p->name, sizeof(p->name));
   np->priority = p->priority;
+  np->qlevel = p->qlevel;
+  np->qticks = 0;
 
   pid = np->pid;
 
@@ -446,6 +454,7 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
+  int bestq, start, k;
 
   c->proc = 0;
   for(;;){
@@ -457,16 +466,30 @@ scheduler(void)
 
     int found = 0;
     struct proc *best = 0;
-    int bestprio = 256;
 
-    // 选择 RUNNABLE 中优先级最高（数值最小）的进程。
+    // 先找到非空的最低队列。
+    bestq = MLFQ_NQUEUES;
     for(p = proc; p < &proc[NPROC]; p++){
       acquire(&p->lock);
-      if(p->state == RUNNABLE && p->priority < bestprio){
-        best = p;
-        bestprio = p->priority;
-      }
+      if(p->state == RUNNABLE && p->qlevel < bestq)
+        bestq = p->qlevel;
       release(&p->lock);
+    }
+
+    // 在最低队列内从轮转起点开始选择进程。
+    if(bestq < MLFQ_NQUEUES){
+      start = rr[bestq];
+      for(k = 0; k < NPROC; k++){
+        p = &proc[(start + k) % NPROC];
+        acquire(&p->lock);
+        if(p->state == RUNNABLE && p->qlevel == bestq){
+          best = p;
+          rr[bestq] = (start + k + 1) % NPROC;
+          release(&p->lock);
+          break;
+        }
+        release(&p->lock);
+      }
     }
 
     if(best){
@@ -505,12 +528,105 @@ ksetpriority(int pid, int prio)
     acquire(&p->lock);
     if(p->pid == pid){
       p->priority = prio;
+      p->qlevel = prio / 64;
+      if(p->qlevel >= MLFQ_NQUEUES)
+        p->qlevel = MLFQ_NQUEUES - 1;
+      p->qticks = 0;
       release(&p->lock);
       return 0;
     }
     release(&p->lock);
   }
   return -1;
+}
+
+// 设置当前进程的信号处理函数。
+int
+ksignal(int sig, uint64 handler)
+{
+  struct proc *p = myproc();
+
+  if(sig <= 0 || sig >= NSIG)
+    return -1;
+  acquire(&p->lock);
+  // 用户程序从地址 0 开始，因此用 handler+1 表示“已设置”。
+  p->sighandlers[sig] = handler + 1;
+  release(&p->lock);
+  return 0;
+}
+
+// 向指定进程发送信号。
+int
+ksigkill(int pid, int sig)
+{
+  struct proc *p;
+
+  if(sig <= 0 || sig >= NSIG)
+    return -1;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid){
+      if(sig == SIGKILL){
+        p->killed = 1;
+        if(p->state == SLEEPING)
+          p->state = RUNNABLE;
+      } else {
+        p->sigpending |= (1UL << sig);
+        if(p->state == SLEEPING)
+          p->state = RUNNABLE;
+      }
+      release(&p->lock);
+      return 0;
+    }
+    release(&p->lock);
+  }
+  return -1;
+}
+
+uint64
+sys_signal(void)
+{
+  int sig;
+  uint64 handler;
+  argint(0, &sig);
+  argaddr(1, &handler);
+  return ksignal(sig, handler);
+}
+
+uint64
+sys_sigkill(void)
+{
+  int pid, sig;
+  argint(0, &pid);
+  argint(1, &sig);
+  return ksigkill(pid, sig);
+}
+
+uint64
+sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+
+  // 恢复进入信号处理前保存的用户现场。
+  *p->trapframe = p->sigframe;
+  return 0;
+}
+
+// 周期性优先级提升：把所有非 UNUSED 进程提升到最高队列。
+void
+mlfq_boost(void)
+{
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED){
+      p->qlevel = 0;
+      p->qticks = 0;
+    }
+    release(&p->lock);
+  }
 }
 
 // 从当前进程切换回调度器。

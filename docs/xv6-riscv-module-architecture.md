@@ -455,6 +455,13 @@ xv6 不能做到 Linux 那样的动态模块加载，但完全可以做到“编
 - 符号链接 `T_SYMLINK` 与 `ln -s`
 - shell `&&` 短路执行
 - 伪设备 `/dev/stats`
+- 命名管道 FIFO 与 `mkfifo`
+- MLFQ 多级反馈队列调度
+- 内核崩溃转储与栈回溯
+- 共享内存与 `PTE_SHM` 共享页
+- 写时复制 fork 与 `PTE_COW`
+- 信号机制与 `sigreturn`
+- `/proc` 动态伪文件系统
 
 尚未落地：
 

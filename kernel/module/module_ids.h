@@ -9,6 +9,7 @@
 // sysinfo 设备主设备号（预留）。
 #define KMOD_SYSINFO_MAJOR 2
 #define KMOD_TRACE_MAJOR   3
+#define KMOD_PROC_MAJOR    4
 
 // sysinfo 模块命令。
 #define SYSINFO_CMD_PROC  1

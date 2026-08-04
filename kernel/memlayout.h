@@ -33,6 +33,7 @@
 // 内核页表使用直接映射：虚拟地址 = 物理地址。
 #define KERNBASE 0x80000000L
 #define PHYSTOP (KERNBASE + 128*1024*1024)
+#define NPHYS ((PHYSTOP-KERNBASE)/4096)
 
 // 动态模块固定加载区域，位于内核 BSS 之后。
 // 该区域从物理页分配器中保留，避免与普通内核内存冲突。
@@ -51,3 +52,7 @@
 //   代码段(text)、数据段、固定大小栈、可扩展堆，
 //   然后是 TRAPFRAME（保存用户寄存器现场）和 TRAMPOLINE。
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
+
+// 共享内存映射区域，位于 TRAPFRAME 下方。
+#define SHM_BASE (TRAPFRAME - 64*PGSIZE)
+#define SHM_MAX_SIZE (32*PGSIZE)

@@ -82,11 +82,15 @@ fileclose(struct file *f)
   // 根据文件类型释放对应底层资源。
   if(ff.type == FD_PIPE){
     pipeclose(ff.pipe, ff.writable);
+  } else if(ff.type == FD_FIFO){
+    fifo_close(ff.pipe, ff.writable);
+    if(ff.readable && ff.writable)
+      fifo_close(ff.pipe, 0);
   } else if(ff.type == FD_DEVICE){
     if(ff.major >= 0 && ff.major < NDEV && devsw[ff.major].close)
       devsw[ff.major].close(&ff);
   }
-  if(ff.type == FD_INODE || ff.type == FD_DEVICE){
+  if(ff.type == FD_INODE || ff.type == FD_DEVICE || ff.type == FD_FIFO){
     begin_op();
     iput(ff.ip);
     end_op();
@@ -100,7 +104,7 @@ filestat(struct file *f, uint64 addr)
   struct proc *p = myproc();
   struct stat st;
   
-  if(f->type == FD_INODE || f->type == FD_DEVICE){
+  if(f->type == FD_INODE || f->type == FD_DEVICE || f->type == FD_FIFO){
     ilock(f->ip);
     stati(f->ip, &st);
     iunlock(f->ip);
@@ -120,7 +124,7 @@ fileread(struct file *f, uint64 addr, int n)
   if(f->readable == 0)
     return -1;
 
-  if(f->type == FD_PIPE){
+  if(f->type == FD_PIPE || f->type == FD_FIFO){
     r = piperead(f->pipe, addr, n);
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].read)
@@ -147,7 +151,7 @@ filewrite(struct file *f, uint64 addr, int n)
   if(f->writable == 0)
     return -1;
 
-  if(f->type == FD_PIPE){
+  if(f->type == FD_PIPE || f->type == FD_FIFO){
     ret = pipewrite(f->pipe, addr, n);
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].write)

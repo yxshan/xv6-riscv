@@ -2,7 +2,7 @@
 // 一个 struct file 可能同时被多个文件描述符引用（fork/dup 共享），
 // 因此用 ref 计数；type 决定读写操作具体分派到管道、inode 还是设备。
 struct file {
-  enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
+  enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE, FD_FIFO } type;
   int ref; // 引用计数
   char readable;
   char writable;
@@ -32,6 +32,7 @@ struct inode {
   short nlink;
   uint size;
   uint addrs[NDIRECT+1];
+  struct pipe *fifo;  // T_FIFO: in-memory named pipe object
 };
 
 // 设备号到设备读写函数的映射表。

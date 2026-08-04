@@ -41,6 +41,22 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+// 在返回用户态前交付一个待处理信号。
+static void
+deliver_signal(struct proc *p)
+{
+  for(int sig = 1; sig < NSIG; sig++){
+    uint64 h = p->sighandlers[sig];
+    if((p->sigpending & (1UL << sig)) && h){
+      p->sigpending &= ~(1UL << sig);
+      p->sigframe = *p->trapframe;
+      p->trapframe->epc = h - 1;
+      p->trapframe->a0 = sig;
+      return;
+    }
+  }
+}
+
 //
 // 处理来自用户态的陷阱：中断、异常或系统调用。
 // 它由 trampoline.S 调用，返回时会把用户页表的 satp 交给 trampoline.S，
@@ -79,6 +95,8 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // 设备中断或定时器中断，devintr() 已处理。
+  } else if(r_scause() == 15 && cow_handle(p->pagetable, r_stval()) == 0){
+    // COW 写缺页：复制物理页并转为可写。
   } else if((r_scause() == 15 || r_scause() == 13) &&
             vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
     // 缺页异常：如果访问的是惰性分配的地址，则在此补上物理页。
@@ -95,6 +113,8 @@ usertrap(void)
   // 定时器中断时让出 CPU，实现抢占式调度。
   if(which_dev == 2)
     yield();
+
+  deliver_signal(p);
 
   prepare_return();
 
@@ -176,6 +196,9 @@ kerneltrap()
 void
 clockintr()
 {
+  struct proc *p;
+  int lim;
+
   // 时钟中断处理：CPU 0 维护全局 ticks 并唤醒等待者，
   // 然后安排下一次时钟中断。
   if(cpuid() == 0){
@@ -184,6 +207,33 @@ clockintr()
     wakeup(&ticks);
     release(&tickslock);
     module_notify_tick();
+    if(ticks % 100 == 0)
+      mlfq_boost();
+  }
+
+  // MLFQ 时间片耗尽后，把当前进程降级到下一队列。
+  p = myproc();
+  if(p){
+    acquire(&p->lock);
+    if(p->state == RUNNING){
+      p->qticks++;
+      switch(p->qlevel){
+      case 0:
+        lim = MLFQ_SLICE0;
+        break;
+      case 1:
+        lim = MLFQ_SLICE1;
+        break;
+      default:
+        lim = MLFQ_SLICE2;
+        break;
+      }
+      if(p->qticks >= lim && p->qlevel < MLFQ_NQUEUES - 1){
+        p->qticks = 0;
+        p->qlevel++;
+      }
+    }
+    release(&p->lock);
   }
 
   // 写 stimecmp 安排下一次中断，同时清除当前中断请求。

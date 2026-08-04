@@ -73,6 +73,9 @@ void            end_op(void);
 
 // pipe.c
 int             pipealloc(struct file**, struct file**);
+struct pipe*    fifoalloc(void);
+void            fifo_open(struct pipe*, int, int);
+void            fifo_close(struct pipe*, int);
 void            pipeclose(struct pipe*, int);
 int             piperead(struct pipe*, uint64, int);
 int             pipewrite(struct pipe*, uint64, int);
@@ -81,11 +84,18 @@ int             pipewrite(struct pipe*, uint64, int);
 int             printf(char*, ...) __attribute__ ((format (printf, 1, 2)));
 void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
+void            backtrace(void);
 
 // proc.c
 int             cpuid(void);
 int             proccount(void);
 int             ksetpriority(int, int);
+void            mlfq_boost(void);
+int             ksignal(int, uint64);
+int             ksigkill(int, int);
+uint64          sys_signal(void);
+uint64          sys_sigkill(void);
+uint64          sys_sigreturn(void);
 void            kexit(int);
 int             kfork(void);
 int             growproc(int);
@@ -147,6 +157,25 @@ void            syscall();
 void            module_init_all(void);
 uint64          module_dispatch(int, int, uint64, uint64);
 uint64          sys_module_call(void);
+uint64          sys_dumpstate(void);
+
+// shm.c
+int             shmget(int, int);
+uint64          shmat(int);
+int             shmdt(int);
+int             shmrm(int);
+void            shm_release_pagetable(pagetable_t);
+void            shm_addref_pa(uint64);
+void            shm_subref_pa(uint64);
+uint64          sys_shmget(void);
+uint64          sys_shmat(void);
+uint64          sys_shmdt(void);
+uint64          sys_shmrm(void);
+
+// cow.c
+int             cow_add(uint64);
+void            cow_release(uint64);
+int             cow_handle(pagetable_t, uint64);
 void            module_notify_tick(void);
 void            module_notify_syscall_enter(int);
 void            module_notify_syscall_exit(int, uint64);

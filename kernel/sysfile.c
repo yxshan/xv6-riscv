@@ -289,7 +289,8 @@ create(char *path, short type, short major, short minor)
   if((ip = dirlookup(dp, name, 0)) != 0){
     iunlockput(dp);
     ilock(ip);
-    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
+    if(type == T_FILE &&
+       (ip->type == T_FILE || ip->type == T_DEVICE || ip->type == T_FIFO))
       return ip;
     iunlockput(ip);
     return 0;
@@ -335,12 +336,34 @@ create(char *path, short type, short major, short minor)
 }
 
 uint64
+sys_mkfifo(void)
+{
+  char path[MAXPATH];
+  int mode;
+  struct inode *ip;
+
+  argstr(0, path, MAXPATH);
+  argint(1, &mode);
+  (void)mode;
+
+  begin_op();
+  if((ip = create(path, T_FIFO, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+  iunlockput(ip);
+  end_op();
+  return 0;
+}
+
+uint64
 sys_open(void)
 {
   char path[MAXPATH];
   int fd, omode;
   struct file *f;
   struct inode *ip;
+  struct pipe *pi = 0;
   int n;
 
   argint(1, &omode);
@@ -375,6 +398,21 @@ sys_open(void)
     return -1;
   }
 
+  // FIFO 第一次打开时创建内存管道，后续打开复用同一个管道对象。
+  if(ip->type == T_FIFO){
+    if(ip->fifo == 0){
+      pi = fifoalloc();
+      if(pi == 0){
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      ip->fifo = pi;
+    } else {
+      pi = ip->fifo;
+    }
+  }
+
   // 分配文件对象和文件描述符，并填写读写权限。
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
     if(f)
@@ -384,7 +422,11 @@ sys_open(void)
     return -1;
   }
 
-  if(ip->type == T_DEVICE){
+  if(ip->type == T_FIFO){
+    f->type = FD_FIFO;
+    f->pipe = pi;
+    fifo_open(pi, !(omode & O_WRONLY), (omode & O_WRONLY) != 0);
+  } else if(ip->type == T_DEVICE){
     f->type = FD_DEVICE;
     f->major = ip->major;
   } else {
