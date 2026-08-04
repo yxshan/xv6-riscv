@@ -185,6 +185,7 @@ KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
 - [xv6-riscv-extension-ideas.md](docs/xv6-riscv-extension-ideas.md)：扩展思路
 - [xv6-riscv-module-architecture.md](docs/xv6-riscv-module-architecture.md)：模块架构
 - [xv6-riscv-module-priorities.md](docs/xv6-riscv-module-priorities.md)：模块方向与优先级
+- [xv6-riscv-module-refinement.md](docs/xv6-riscv-module-refinement.md)：现有模块完善批次
 - [AGENTS.md](AGENTS.md)：贡献者指南
 
 ## 致谢

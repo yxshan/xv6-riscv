@@ -86,7 +86,7 @@ copyout(char *s)
   for(int ai = 0; ai < sizeof(addrs)/sizeof(addrs[0]); ai++){
     uint64 addr = addrs[ai];
 
-    int fd = open("README", 0);
+    int fd = open("README.md", 0);
     if(fd < 0){
       printf("open(README) failed\n");
       exit(1);
@@ -276,7 +276,7 @@ rwsbrk(char *s)
   close(fd);
   unlink("rwsbrk");
 
-  fd = open("README", O_RDONLY);
+  fd = open("README.md", O_RDONLY);
   if(fd < 0){
     printf("open(README) failed\n");
     exit(1);
@@ -1900,7 +1900,7 @@ dirfile(char *s)
     printf("%s: unlink dirfile/xx succeeded!\n", s);
     exit(1);
   }
-  if(link("README", "dirfile/xx") == 0){
+  if(link("README.md", "dirfile/xx") == 0){
     printf("%s: link to dirfile/xx succeeded!\n", s);
     exit(1);
   }
@@ -1940,7 +1940,7 @@ iref(char *s)
     }
 
     mkdir("");
-    link("README", "");
+    link("README.md", "");
     fd = open("", O_CREATE);
     if(fd >= 0)
       close(fd);
@@ -2688,7 +2688,7 @@ lazy_copy(char *s)
     0x8000000000,
   };
   for(int i = 0; i < sizeof(bad)/sizeof(bad[0]); i++){
-    int fd = open("README", 0);
+    int fd = open("README.md", 0);
     if(fd < 0) { printf("cannot open README\n"); exit(1); }
     if(read(fd, (char*)bad[i], 512) >= 0) { printf("read succeeded\n");  exit(1); }
     close(fd);
@@ -2716,7 +2716,7 @@ lazy_sbrk(char *s)
     p = sbrklazy(0);
   }
 
-  int n = TRAPFRAME-PGSIZE-(uint64)p;
+  int n = SHM_BASE-PGSIZE-(uint64)p;
 
   char *p1 = sbrklazy(n);
   if (p1 < 0 || p1 != p) {
@@ -2725,8 +2725,8 @@ lazy_sbrk(char *s)
   }
 
   p = sbrk(PGSIZE);
-  if (p < 0 || (uint64)p != TRAPFRAME-PGSIZE) {
-    printf("sbrk(%d) returned %p, not expected TRAPFRAME-PGSIZE\n", PGSIZE, p);
+  if (p < 0 || (uint64)p != SHM_BASE-PGSIZE) {
+    printf("sbrk(%d) returned %p, not expected SHM_BASE-PGSIZE\n", PGSIZE, p);
     exit(1);
   }
 
@@ -2748,6 +2748,101 @@ lazy_sbrk(char *s)
     exit(1);
   }
 
+  exit(0);
+}
+
+// FIFO O_RDWR：同一描述符可先写后读，阻塞读端也能被 O_RDWR 写端唤醒。
+void
+fifo_rdwr(char *s)
+{
+  char c;
+  int fd, pid, st;
+
+  unlink("fifordwr");
+  if(mkfifo("fifordwr", 0) < 0){
+    printf("%s: mkfifo failed\n", s);
+    exit(1);
+  }
+
+  fd = open("fifordwr", O_RDWR);
+  if(fd < 0){
+    printf("%s: open fifo O_RDWR failed\n", s);
+    exit(1);
+  }
+  if(write(fd, "x", 1) != 1 || read(fd, &c, 1) != 1 || c != 'x'){
+    printf("%s: fifo O_RDWR read/write failed\n", s);
+    exit(1);
+  }
+  close(fd);
+
+  pid = fork();
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    fd = open("fifordwr", O_RDONLY);
+    if(fd < 0)
+      exit(1);
+    if(read(fd, &c, 1) != 1 || c != 'y')
+      exit(1);
+    close(fd);
+    exit(0);
+  }
+
+  fd = open("fifordwr", O_RDWR);
+  if(fd < 0 || write(fd, "y", 1) != 1){
+    printf("%s: fifo O_RDWR writer failed\n", s);
+    exit(1);
+  }
+  close(fd);
+  if(wait(&st) != pid || st != 0){
+    printf("%s: fifo reader failed\n", s);
+    exit(1);
+  }
+  unlink("fifordwr");
+  exit(0);
+}
+
+// COW fork：子进程写入多个页面后，父进程数据必须保持不变。
+void
+cowfork(char *s)
+{
+  enum { NPAGES = 16 };
+  char *base = sbrk(0);
+  char *a = sbrk(NPAGES * PGSIZE);
+
+  if(a == SBRK_ERROR){
+    printf("%s: sbrk failed\n", s);
+    exit(1);
+  }
+  memset(a, 0x5a, NPAGES * PGSIZE);
+
+  for(int i = 0; i < 4; i++){
+    int pid = fork();
+    int st;
+    if(pid < 0){
+      printf("%s: fork failed\n", s);
+      exit(1);
+    }
+    if(pid == 0){
+      for(int j = 0; j < NPAGES; j++)
+        a[j * PGSIZE + (j * 17) % PGSIZE] = (char)('a' + i);
+      exit(0);
+    }
+    if(wait(&st) != pid || st != 0){
+      printf("%s: COW child failed\n", s);
+      exit(1);
+    }
+    for(int j = 0; j < NPAGES; j++){
+      if(a[j * PGSIZE + (j * 17) % PGSIZE] != 0x5a){
+        printf("%s: COW parent page corrupted at %d\n", s, j);
+        exit(1);
+      }
+    }
+  }
+
+  sbrk(-((uint64)sbrk(0) - (uint64)base));
   exit(0);
 }
 
@@ -2819,6 +2914,8 @@ struct test {
   {lazy_unmap, "lazy_unmap"},
   {lazy_copy, "lazy_copy"},
   {lazy_sbrk, "lazy_sbrk"},
+  {fifo_rdwr, "fifo_rdwr"},
+  {cowfork, "cowfork"},
   { 0, 0},
 };
 

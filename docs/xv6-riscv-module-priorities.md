@@ -11,6 +11,10 @@
 - 风险控制：对核心路径的侵入程度
 - 可验证性：是否容易用 QEMU 和测试程序验证
 
+> 现有模块的“补全与修复”进度见
+> [xv6-riscv-module-refinement.md](xv6-riscv-module-refinement.md)，
+> 本文件主要记录新增功能方向的优先级。
+
 ## 2. 评价维度与权重
 
 | 维度 | 权重 |

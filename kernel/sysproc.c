@@ -65,7 +65,8 @@ sys_sbrk(void)
     // 进程真正读写这些地址时，缺页处理 vmfault() 才分配物理页。
     if(addr + n < addr)
       return -1;
-    if(addr + n > TRAPFRAME)
+    // 与普通 sbrk 保持一致，避免堆侵入共享内存区域。
+    if(addr + n > SHM_BASE)
       return -1;
     myproc()->sz += n;
   }

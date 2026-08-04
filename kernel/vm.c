@@ -334,12 +334,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     }
     if(flags & PTE_W){
       // 可写页转为 COW：父进程与子进程都变成只读共享。
+      uint64 oldflags = PTE_FLAGS(*pte);
       *pte = (*pte & ~PTE_W) | PTE_COW;
       flags = PTE_FLAGS(*pte);
       cow_add(pa); // 父进程引用
       cow_add(pa);
       // 子进程引用
       if(mappages(new, i, PGSIZE, pa, flags) != 0){
+        // 回滚父进程页表并释放本次新增的两个引用，避免引用计数泄漏。
+        *pte = PA2PTE(pa) | oldflags;
+        cow_release(pa);
         cow_release(pa);
         goto err;
       }

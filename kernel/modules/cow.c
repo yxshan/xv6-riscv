@@ -65,6 +65,8 @@ cow_handle(pagetable_t pagetable, uint64 va)
   uint64 pa;
   char *mem;
 
+  if(va >= MAXVA)
+    return -1;
   pte = walk(pagetable, va, 0);
   if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_COW) == 0)
     return -1;

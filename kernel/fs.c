@@ -705,6 +705,8 @@ namex(char *path, int nameiparent, char *name)
       iunlockput(ip);
       return 0;
     }
+    // 先释放父目录，再锁子目录，避免 "." / ".." 等自引用目录死锁。
+    iunlock(ip);
     ilock(next);
     if(next->type == T_SYMLINK){
       char target[MAXPATH];
@@ -714,30 +716,28 @@ namex(char *path, int nameiparent, char *name)
         n = MAXPATH - 1;
       if(readi(next, 0, (uint64)target, 0, n) != n){
         iunlockput(next);
-        iunlockput(ip);
+        iput(ip);
         return 0;
       }
       target[n] = 0;
       iunlockput(next);
 
       if(++depth > 8){
-        iunlockput(ip);
+        iput(ip);
         return 0;
       }
 
       if(target[0] == '/'){
         // 绝对符号链接：从根目录重新解析。
-        iunlockput(ip);
+        iput(ip);
         ip = iget(ROOTDEV, ROOTINO);
-      } else {
-        // 相对符号链接：从当前目录继续解析。
-        iunlock(ip);
       }
+      // 相对符号链接：继续从当前目录解析，ip 已解锁。
       path = target;
       continue;
     }
     iunlock(next);
-    iunlockput(ip);
+    iput(ip);
     ip = next;
   }
   if(nameiparent){

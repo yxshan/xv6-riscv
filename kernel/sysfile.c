@@ -360,7 +360,7 @@ uint64
 sys_open(void)
 {
   char path[MAXPATH];
-  int fd, omode;
+  int fd, omode, fifo_read, fifo_write;
   struct file *f;
   struct inode *ip;
   struct pipe *pi = 0;
@@ -425,7 +425,10 @@ sys_open(void)
   if(ip->type == T_FIFO){
     f->type = FD_FIFO;
     f->pipe = pi;
-    fifo_open(pi, !(omode & O_WRONLY), (omode & O_WRONLY) != 0);
+    // O_RDWR 同时拥有读端和写端，不能只按 O_WRONLY 判断。
+    fifo_read = (omode & O_RDWR) || !(omode & O_WRONLY);
+    fifo_write = (omode & O_RDWR) || (omode & O_WRONLY);
+    fifo_open(pi, fifo_read, fifo_write);
   } else if(ip->type == T_DEVICE){
     f->type = FD_DEVICE;
     f->major = ip->major;
