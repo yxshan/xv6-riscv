@@ -58,10 +58,12 @@ struct {
 // 使用 uartwrite()，它依赖睡眠和 UART 发送完成中断。
 //
 int
-consolewrite(int user_src, uint64 src, int n)
+consolewrite(struct file *f, int user_src, uint64 src, int n)
 {
   char buf[32]; // move batches from user space to uart.
   int i = 0;
+
+  (void)f;
 
   while(i < n){
     int nn = sizeof(buf);
@@ -81,11 +83,13 @@ consolewrite(int user_src, uint64 src, int n)
 // 通常复制一整行到用户缓冲区；用户/内核地址由 user_dst 区分。
 //
 int
-consoleread(int user_dst, uint64 dst, int n)
+consoleread(struct file *f, int user_dst, uint64 dst, int n)
 {
   uint target;
   int c;
   char cbuf;
+
+  (void)f;
 
   target = n;
   acquire(&cons.lock);

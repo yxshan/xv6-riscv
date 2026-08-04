@@ -40,8 +40,12 @@ freerange(void *pa_start, void *pa_end)
   char *p;
   // 起点向上对齐到页边界，确保每次释放一整页。
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    // 跳过动态模块保留区域，防止被普通物理页分配器使用。
+    if((uint64)p >= DYNMOD_BASE && (uint64)p < DYNMOD_BASE + DYNMOD_SIZE)
+      continue;
     kfree(p);
+  }
 }
 
 // 释放 pa 指向的物理页。
@@ -84,4 +88,20 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // 同样用垃圾值填充，便于发现未初始化访问
   return (void*)r;
+}
+
+// 返回当前空闲物理内存字节数。
+// 通过遍历空闲链表统计，供 sysinfo 等模块读取。
+uint64
+freemem(void)
+{
+  uint64 n = 0;
+  struct run *r;
+
+  acquire(&kmem.lock);
+  for(r = kmem.freelist; r; r = r->next)
+    n++;
+  release(&kmem.lock);
+
+  return n * PGSIZE;
 }

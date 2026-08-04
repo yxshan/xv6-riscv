@@ -11,6 +11,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct kmod_device;
 
 // bio.c
 void            binit(void);
@@ -62,6 +63,7 @@ void            ireclaim(int);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
+uint64          freemem(void);
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -82,6 +84,8 @@ void            printfinit(void);
 
 // proc.c
 int             cpuid(void);
+int             proccount(void);
+int             ksetpriority(int, int);
 void            kexit(int);
 int             kfork(void);
 int             growproc(int);
@@ -138,6 +142,18 @@ void            argaddr(int, uint64 *);
 int             fetchstr(uint64, char*, int);
 int             fetchaddr(uint64, uint64*);
 void            syscall();
+
+// module.c
+void            module_init_all(void);
+uint64          module_dispatch(int, int, uint64, uint64);
+uint64          sys_module_call(void);
+void            module_notify_tick(void);
+void            module_notify_syscall_enter(int);
+void            module_notify_syscall_exit(int, uint64);
+void            module_notify_proc_fork(struct proc*);
+void            module_notify_proc_exit(struct proc*);
+int             module_device_register(struct kmod_device*);
+int             module_device_unregister(int);
 
 // trap.c
 extern uint     ticks;

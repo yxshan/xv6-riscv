@@ -16,6 +16,7 @@
 #define PIPE  3
 #define LIST  4
 #define BACK  5
+#define AND   6
 
 #define MAXARGS 10
 
@@ -55,6 +56,12 @@ struct backcmd {
   struct cmd *cmd;
 };
 
+struct andcmd {
+  int type;
+  struct cmd *left;
+  struct cmd *right;
+};
+
 int fork1(void);  // Fork but panics on failure.
 void panic(char*);
 struct cmd *parsecmd(char*);
@@ -65,11 +72,13 @@ void
 runcmd(struct cmd *cmd)
 {
   int p[2];
+  struct andcmd *acmd;
   struct backcmd *bcmd;
   struct execcmd *ecmd;
   struct listcmd *lcmd;
   struct pipecmd *pcmd;
   struct redircmd *rcmd;
+  int astatus;
 
   if(cmd == 0)
     exit(1);
@@ -85,7 +94,7 @@ runcmd(struct cmd *cmd)
       exit(1);
     exec(ecmd->argv[0], ecmd->argv);
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
-    break;
+    exit(1);
 
   case REDIR:
     // 重定向：先把目标文件打开到指定 fd，再执行子命令。
@@ -137,6 +146,19 @@ runcmd(struct cmd *cmd)
     bcmd = (struct backcmd*)cmd;
     if(fork1() == 0)
       runcmd(bcmd->cmd);
+    break;
+
+  case AND:
+    // 短路执行：左边成功才运行右边。
+    acmd = (struct andcmd*)cmd;
+    if(fork1() == 0)
+      runcmd(acmd->left);
+    wait(&astatus);
+    if(astatus == 0){
+      if(fork1() == 0)
+        runcmd(acmd->right);
+      wait(0);
+    }
     break;
   }
   exit(0);
@@ -274,6 +296,19 @@ backcmd(struct cmd *subcmd)
   cmd->cmd = subcmd;
   return (struct cmd*)cmd;
 }
+
+struct cmd*
+andcmd(struct cmd *left, struct cmd *right)
+{
+  struct andcmd *cmd;
+
+  cmd = malloc(sizeof(*cmd));
+  memset(cmd, 0, sizeof(*cmd));
+  cmd->type = AND;
+  cmd->left = left;
+  cmd->right = right;
+  return (struct cmd*)cmd;
+}
 //PAGEBREAK!
 // 命令行解析：把输入字符串拆成 token，构造命令树。
 
@@ -300,9 +335,15 @@ gettoken(char **ps, char *es, char **q, char **eq)
   case '(':
   case ')':
   case ';':
-  case '&':
   case '<':
     s++;
+    break;
+  case '&':
+    s++;
+    if(*s == '&'){
+      ret = 'A';  // "&&" 表示逻辑与
+      s++;
+    }
     break;
   case '>':
     s++;
@@ -367,8 +408,11 @@ parseline(char **ps, char *es)
 
   cmd = parsepipe(ps, es);
   while(peek(ps, es, "&")){
-    gettoken(ps, es, 0, 0);
-    cmd = backcmd(cmd);
+    int tok = gettoken(ps, es, 0, 0);
+    if(tok == 'A')
+      cmd = andcmd(cmd, parseline(ps, es));
+    else
+      cmd = backcmd(cmd);
   }
   if(peek(ps, es, ";")){
     gettoken(ps, es, 0, 0);
@@ -469,6 +513,7 @@ struct cmd*
 nulterminate(struct cmd *cmd)
 {
   int i;
+  struct andcmd *acmd;
   struct backcmd *bcmd;
   struct execcmd *ecmd;
   struct listcmd *lcmd;
@@ -506,6 +551,12 @@ nulterminate(struct cmd *cmd)
   case BACK:
     bcmd = (struct backcmd*)cmd;
     nulterminate(bcmd->cmd);
+    break;
+
+  case AND:
+    acmd = (struct andcmd*)cmd;
+    nulterminate(acmd->left);
+    nulterminate(acmd->right);
     break;
   }
   return cmd;

@@ -34,6 +34,11 @@
 #define KERNBASE 0x80000000L
 #define PHYSTOP (KERNBASE + 128*1024*1024)
 
+// 动态模块固定加载区域，位于内核 BSS 之后。
+// 该区域从物理页分配器中保留，避免与普通内核内存冲突。
+#define DYNMOD_BASE 0x80040000L
+#define DYNMOD_SIZE (4*4096)
+
 // trampoline 是处理陷阱的跳板代码，被同时映射到内核和用户地址空间的最高页。
 // 这样用户态陷入内核时，页表切换前后 PC 仍能落在同一段代码上。
 #define TRAMPOLINE (MAXVA - PGSIZE)

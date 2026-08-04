@@ -16,6 +16,8 @@
 #include "file.h"
 #include "fcntl.h"
 
+static struct inode* create(char *path, short type, short major, short minor);
+
 // 取出第 n 个参数作为文件描述符，并返回对应的 struct file。
 // 校验描述符是否在范围内、进程是否真的打开了该文件。
 static int
@@ -169,6 +171,35 @@ bad:
   iunlockput(ip);
   end_op();
   return -1;
+}
+
+// 创建 path 指向 target 的符号链接。
+uint64
+sys_symlink(void)
+{
+  char target[MAXPATH], path[MAXPATH];
+  struct inode *ip;
+  int n;
+
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  begin_op();
+  if((ip = create(path, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  n = strlen(target) + 1;
+  if(writei(ip, 0, (uint64)target, 0, n) != n){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  iunlockput(ip);
+  end_op();
+  return 0;
 }
 
 // 判断目录是否为空（除 "." 和 ".." 外没有其他目录项）。
@@ -363,6 +394,14 @@ sys_open(void)
   f->ip = ip;
   f->readable = !(omode & O_WRONLY);
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+
+  if(ip->type == T_DEVICE && devsw[f->major].open && devsw[f->major].open(f) < 0){
+    myproc()->ofile[fd] = 0;
+    iunlock(ip);
+    fileclose(f);
+    end_op();
+    return -1;
+  }
 
   if((omode & O_TRUNC) && ip->type == T_FILE){
     itrunc(ip);

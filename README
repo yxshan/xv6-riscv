@@ -1,48 +1,163 @@
-xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
-Version 6 (v6).  xv6 loosely follows the structure and style of v6,
-but is implemented for a modern RISC-V multiprocessor using ANSI C.
+# xv6-riscv
 
-ACKNOWLEDGMENTS
+xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
+本仓库是面向 RISC-V 64 位多处理器的移植版本，并在保留教学简洁性的基础上，
+增加了模块化拓展架构、动态模块加载、可观测性工具和一系列 P0 功能。
 
-xv6 is inspired by John Lions's Commentary on UNIX 6th Edition (Peer
-to Peer Communications; ISBN: 1-57398-013-7; 1st edition (June 14,
-2000)).  See also https://pdos.csail.mit.edu/6.1810/, which provides
-pointers to on-line resources for v6.
+## 主要特性
 
-The following people have made contributions: Russ Cox (context switching,
-locking), Cliff Frey (MP), Xiao Yu (MP), Nickolai Zeldovich, and Austin
-Clements.
+- 基于 RISC-V Sv39 页表、多核调度、陷阱与中断、日志文件系统
+- 核心源码补充中文注释和原理讲解
+- 编译期模块注册表：模块自动扫描，无需反复修改 `Makefile`
+- 通用系统调用 `module_call()`：新增功能优先通过模块命令暴露
+- 事件钩子机制：tick、syscall enter/exit、proc fork/exit
+- 完整设备文件接口：`open/read/write/close`
+- 伪设备：`/dev/sysinfo`、`/dev/stats`
+- 教学级动态模块加载：`modload` / `modunload`
+- P0 工具：`strace`、`perf`、`prio`、`procinfo`
+- 进程优先级调度与 `setpriority`
+- 符号链接：`ln -s`
+- shell `&&` 短路执行
 
-We are also grateful for the bug reports and patches contributed by
-Abhinavpatel00, Takahiro Aoyagi, Marcelo Arroyo, Hirbod Behnam, Silas
-Boyd-Wickizer, Anton Burtsev, carlclone, Ian Chen, clivezeng, Dan
-Cross, Cody Cutler, Mike CAT, Tej Chajed, Asami Doi,Wenyang Duan,
-echtwerner, eyalz800, Nelson Elhage, Saar Ettinger, Alice Ferrazzi,
-Nathaniel Filardo, flespark, Peter Froehlich, Yakir Goaron, Shivam
-Handa, Matt Harvey, Bryan Henry, jaichenhengjie, Jim Huang, Matúš
-Jókay, John Jolly, Alexander Kapshuk, Anders Kaseorg, kehao95,
-Wolfgang Keller, Jungwoo Kim, Jonathan Kimmitt, Eddie Kohler, Vadim
-Kolontsov, Austin Liew, l0stman, Pavan Maddamsetti, Imbar Marinescu,
-Yandong Mao, Matan Shabtay, Hitoshi Mitake, Carmi Merimovich,
-mes900903, Mark Morrissey, mtasm, Joel Nider, Hayato Ohhashi,
-OptimisticSide, papparapa, phosphagos, Harry Porter, Greg Price, Zheng
-qhuo, Quancheng, RayAndrew, Jude Rich, segfault, Ayan Shafqat, Eldar
-Sehayek, Yongming Shen, Fumiya Shigemitsu, snoire, Taojie, Cam Tenny,
-tyfkda, Warren Toomey, Stephen Tu, Alissa Tung, Rafael Ubal, unicornx,
-Amane Uehara, Pablo Ventura, Luc Videau, Xi Wang, WaheedHafez, Keiichi
-Watanabe, Lucas Wolf, Nicolas Wolovick, wxdao, Grant Wu, x653, Andy
-Zhang, Jindong Zhang, Icenowy Zheng, ZhUyU1997, and Zou Chang Wei.
+## 目录结构
 
-ERROR REPORTS
+```text
+kernel/
+  module/         模块基础设施
+  modules/        静态与动态示例模块
+  ...             内核核心源码
+user/
+  modules/        自动扫描的用户模块
+  ...             用户程序与用户库
+mkfs/
+  mkfs.c          文件系统镜像构建工具
+test-xv6.py       QEMU 自动化测试脚本
+```
 
-Please send errors and suggestions to Frans Kaashoek and Robert Morris
-(kaashoek,rtm@mit.edu).  The main purpose of xv6 is as a teaching
-operating system for MIT's 6.1810, so we are more interested in
-simplifications and clarifications than new features.
+## 构建与运行
 
-BUILDING AND RUNNING XV6
+需要 RISC-V newlib 工具链和 `qemu-system-riscv64` 7.2 以上版本。
 
-You will need a RISC-V "newlib" tool chain from
-https://github.com/riscv/riscv-gnu-toolchain, and qemu compiled for
-riscv64-softmmu.  Once they are installed, and in your shell
-search path, you can run "make qemu".
+```bash
+make qemu
+```
+
+其他常用命令：
+
+```bash
+make kernel/kernel      # 只构建内核
+make fs.img             # 构建文件系统镜像
+make qemu-gdb           # 使用 GDB 调试
+make clean              # 清理构建产物
+```
+
+自动化测试：
+
+```bash
+./test-xv6.py -q usertests
+./test-xv6.py usertests
+./test-xv6.py crash
+```
+
+## 使用示例
+
+进入 xv6 shell 后：
+
+```text
+$ procinfo
+pid 1 sleep prio 50 init
+pid 2 sleep prio 50 sh
+
+$ prio 2 10
+setpriority(2, 10) = 0
+
+$ strace echo hi
+strace: syscalls=7 forks=1 exits=1 ticks=0 status=0
+
+$ perf echo hi
+perf: syscalls=7 ticks=0 forks=1 exits=1 free_pages=32529
+
+$ cat /dev/sysinfo
+proc 3
+mem 32533
+ticks 113
+
+$ cat /dev/stats
+syscalls 387
+forks 14
+exits 12
+ticks 352
+
+$ ln -s README link
+$ cat link
+xv6 is a re-implementation...
+
+$ echo one && echo two
+one
+two
+```
+
+动态模块示例：
+
+```text
+$ modload dynmod
+dynmod loaded
+module_load = 0
+
+$ modcli 3 1
+module_call(3, 1) = 4660
+
+$ modunload
+module_unload = 0
+```
+
+## 模块拓展方式
+
+### 静态内核模块
+
+在 `kernel/modules/` 新建 C 文件：
+
+```c
+#include "module.h"
+#include "module_ids.h"
+
+static uint64
+foo_handler(int cmd, uint64 arg0, uint64 arg1)
+{
+  return 0;
+}
+
+KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
+```
+
+在 `kernel/module/module_ids.h` 登记模块 ID 后重新构建即可。
+
+### 用户模块
+
+在 `user/modules/` 新建 C 文件，`Makefile` 会自动生成 `_程序名` 并加入
+`fs.img`。
+
+### 动态模块
+
+动态模块被链接到固定地址 `DYNMOD_BASE`，通过 `struct kmod_api *` 访问内核
+功能，由 `modload` 加载、`modunload` 卸载。
+
+当前动态模块支持单个模块加载，暂不支持 ELF 重定位和内核符号解析。
+
+## 文档
+
+- [xv6-riscv-source-analysis.md](xv6-riscv-source-analysis.md)：源码分析
+- [xv6-riscv-extension-ideas.md](xv6-riscv-extension-ideas.md)：扩展思路
+- [xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)：模块架构
+- [xv6-riscv-module-priorities.md](xv6-riscv-module-priorities.md)：模块方向与优先级
+- [AGENTS.md](AGENTS.md)：贡献者指南
+
+## 致谢
+
+xv6 源自 MIT 6.1810 操作系统课程，参考了 John Lions 对 UNIX 6th Edition
+的经典注释。原始贡献者包括 Russ Cox、Cliff Frey、Xiao Yu、Nickolai
+Zeldovich、Austin Clements，以及众多提交补丁和报告问题的开发者。
+
+## License
+
+本仓库遵循原 xv6 的 MIT License，详见 [LICENSE](LICENSE)。

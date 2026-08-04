@@ -97,6 +97,7 @@ struct proc {
   int killed;                  // 非 0 表示已被 kill
   int xstate;                  // 退出状态，等待父进程 wait() 读取
   int pid;                     // Process ID
+  int priority;                // 调度优先级，0 最高，255 最低
 
   // 访问 parent 时必须持有 wait_lock：
   struct proc *parent;         // 父进程

@@ -35,9 +35,12 @@ struct inode {
 };
 
 // 设备号到设备读写函数的映射表。
+// 设备模块通过这些回调接入文件描述符层，类似 Linux 的 file_operations。
 struct devsw {
-  int (*read)(int, uint64, int);
-  int (*write)(int, uint64, int);
+  int (*open)(struct file*);
+  int (*read)(struct file*, int, uint64, int);
+  int (*write)(struct file*, int, uint64, int);
+  int (*close)(struct file*);
 };
 
 extern struct devsw devsw[];

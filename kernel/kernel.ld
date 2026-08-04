@@ -34,6 +34,30 @@ SECTIONS
     *(.data .data.*)
   }
 
+  .kmods : {
+    . = ALIGN(16);
+    __kmods_start = .;
+    KEEP(*(.kmods))
+    __kmods_end = .;
+    . = ALIGN(16);
+  }
+
+  .kmod_sys : {
+    . = ALIGN(16);
+    __kmod_sys_start = .;
+    KEEP(*(.kmod_sys))
+    __kmod_sys_end = .;
+    . = ALIGN(16);
+  }
+
+  .kmod_hooks : {
+    . = ALIGN(16);
+    __kmod_hooks_start = .;
+    KEEP(*(.kmod_hooks))
+    __kmod_hooks_end = .;
+    . = ALIGN(16);
+  }
+
   .bss : {
     . = ALIGN(16);
     *(.sbss .sbss.*) /* do not need to distinguish this from .bss */

@@ -24,6 +24,11 @@ int getpid(void);
 char* sys_sbrk(int,int);
 int pause(int);
 int uptime(void);
+uint64 module_call(int, int, uint64, uint64);
+int module_load(uint64, int);
+int module_unload(void);
+int setpriority(int, int);
+int symlink(const char*, const char*);
 
 // ulib.c
 int stat(const char*, struct stat*);

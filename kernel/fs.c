@@ -677,6 +677,7 @@ static struct inode*
 namex(char *path, int nameiparent, char *name)
 {
   struct inode *ip, *next;
+  int depth = 0;
 
   // 绝对路径从根 inode 开始，相对路径从当前目录开始。
   if(*path == '/')
@@ -700,6 +701,38 @@ namex(char *path, int nameiparent, char *name)
       iunlockput(ip);
       return 0;
     }
+    ilock(next);
+    if(next->type == T_SYMLINK){
+      char target[MAXPATH];
+      int n = next->size;
+
+      if(n >= MAXPATH)
+        n = MAXPATH - 1;
+      if(readi(next, 0, (uint64)target, 0, n) != n){
+        iunlockput(next);
+        iunlockput(ip);
+        return 0;
+      }
+      target[n] = 0;
+      iunlockput(next);
+
+      if(++depth > 8){
+        iunlockput(ip);
+        return 0;
+      }
+
+      if(target[0] == '/'){
+        // 绝对符号链接：从根目录重新解析。
+        iunlockput(ip);
+        ip = iget(ROOTDEV, ROOTINO);
+      } else {
+        // 相对符号链接：从当前目录继续解析。
+        iunlock(ip);
+      }
+      path = target;
+      continue;
+    }
+    iunlock(next);
     iunlockput(ip);
     ip = next;
   }

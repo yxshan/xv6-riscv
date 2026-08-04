@@ -46,3 +46,8 @@ entry("getpid");
 entry("sbrk");
 entry("pause");
 entry("uptime");
+entry("module_call");
+entry("module_load");
+entry("module_unload");
+entry("setpriority");
+entry("symlink");

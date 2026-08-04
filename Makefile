@@ -34,6 +34,20 @@ OBJS = \
   $K/plic.o \
   $K/virtio_disk.o
 
+# 自动收集模块目录下的内核源文件，新增模块无需再改 OBJS。
+# dynmod_sample.c 是动态模块，编译为独立二进制，不能链接进内核。
+KMOD_OBJS = $(filter-out $K/modules/dynmod_sample.o,$(patsubst %.c,%.o,$(wildcard $K/module/*.c $K/modules/*.c)))
+OBJS += $(KMOD_OBJS)
+
+# 自动收集 user/modules 下的用户程序，新增用户模块无需改 UPROGS。
+UMOD_SRCS = $(wildcard $U/modules/*.c)
+UMOD_BINS = $(patsubst $U/modules/%.c,$U/_%,$(UMOD_SRCS))
+
+DYNMOD_SRC = $K/modules/dynmod_sample.c
+DYNMOD_OBJ = $K/modules/dynmod_sample.o
+DYNMOD_ELF = $K/modules/dynmod_sample.elf
+DYNMOD_BIN = dynmod
+
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
 #TOOLPREFIX = 
@@ -78,6 +92,8 @@ CFLAGS += -fno-builtin-free
 CFLAGS += -fno-builtin-memcpy -Wno-main
 CFLAGS += -fno-builtin-printf -fno-builtin-fprintf -fno-builtin-vprintf
 CFLAGS += -I.
+CFLAGS += -I$K
+CFLAGS += -I$K/module
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
@@ -107,6 +123,19 @@ _%: %.o $(ULIB) $U/user.ld
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $*.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
+
+$U/%.o: $U/modules/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$U/_%: $U/modules/%.o $(ULIB) $U/user.ld
+	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
+	$(OBJDUMP) -S $@ > $*.asm
+	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
+
+$(DYNMOD_BIN): $(DYNMOD_SRC) $K/module/dynmod.ld
+	$(CC) $(CFLAGS) -fno-pic -c -o $(DYNMOD_OBJ) $(DYNMOD_SRC)
+	$(LD) -T $K/module/dynmod.ld -o $(DYNMOD_ELF) $(DYNMOD_OBJ)
+	$(OBJCOPY) -O binary $(DYNMOD_ELF) $@
 
 $U/usys.S : $U/usys.pl
 	perl $U/usys.pl > $U/usys.S
@@ -149,15 +178,27 @@ UPROGS=\
 	$U/_logstress\
 	$U/_forphan\
 	$U/_dorphan\
+	$U/_modcli\
+	$U/_modload\
+	$U/_modunload\
+	$U/_strace\
+	$U/_perf\
+	$U/_prio\
+	$U/_procinfo\
+	$(UMOD_BINS)\
 
-fs.img: mkfs/mkfs README $(UPROGS)
-	mkfs/mkfs fs.img README $(UPROGS)
+fs.img: mkfs/mkfs README $(UPROGS) $(DYNMOD_BIN)
+	mkfs/mkfs fs.img README $(UPROGS) $(DYNMOD_BIN)
 
--include kernel/*.d user/*.d
+-include kernel/*.d kernel/module/*.d kernel/modules/*.d user/*.d user/modules/*.d
 
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*/*.o */*.d */*.asm */*.sym \
+	kernel/module/*.o kernel/module/*.d \
+	kernel/modules/*.o kernel/modules/*.d \
+	user/modules/*.o user/modules/*.d $(UMOD_BINS) \
+	$(DYNMOD_OBJ) $(DYNMOD_ELF) $(DYNMOD_BIN) \
 	$K/kernel fs.img \
 	mkfs/mkfs .gdbinit \
         $U/usys.S \

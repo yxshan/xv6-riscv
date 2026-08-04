@@ -1,5 +1,7 @@
 *~
 _*
+.DS_Store
+.idea/
 *.o
 *.d
 *.asm
@@ -13,6 +15,8 @@ initcode.out
 kernelmemfs
 mkfs
 kernel/kernel
+dynmod
+kernel/modules/dynmod_sample.elf
 user/usys.S
 .gdbinit
 TAGS

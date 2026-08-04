@@ -96,6 +96,16 @@ sys_pause(void)
 }
 
 uint64
+sys_setpriority(void)
+{
+  int pid, prio;
+
+  argint(0, &pid);
+  argint(1, &prio);
+  return ksetpriority(pid, prio);
+}
+
+uint64
 sys_kill(void)
 {
   int pid;

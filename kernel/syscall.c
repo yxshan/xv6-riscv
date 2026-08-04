@@ -108,6 +108,11 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64 sys_module_call(void);
+extern uint64 sys_module_load(void);
+extern uint64 sys_module_unload(void);
+extern uint64 sys_setpriority(void);
+extern uint64 sys_symlink(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -133,6 +138,11 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_module_call] sys_module_call,
+[SYS_module_load] sys_module_load,
+[SYS_module_unload] sys_module_unload,
+[SYS_setpriority] sys_setpriority,
+[SYS_symlink] sys_symlink,
 };
 
 void
@@ -143,6 +153,7 @@ syscall(void)
 
   // a7 是用户程序传入的系统调用编号。
   num = p->trapframe->a7;
+  module_notify_syscall_enter(num);
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     // 查表调用对应的内核实现，返回值写入 a0，
     // 用户态从 ecall 返回后就能通过寄存器读到结果。
@@ -153,4 +164,5 @@ syscall(void)
             p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
+  module_notify_syscall_exit(num, p->trapframe->a0);
 }

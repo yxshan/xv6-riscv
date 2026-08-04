@@ -10,6 +10,7 @@
 #include "kernel/file.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
+#include "kernel/module/module_ids.h"
 
 char *argv[] = { "sh", 0 };
 
@@ -22,6 +23,9 @@ main(void)
     mknod("console", CONSOLE, 0);
     open("console", O_RDWR);
   }
+  // 创建模块伪设备节点；若镜像中已存在则忽略失败。
+  mknod("sysinfo", KMOD_SYSINFO_MAJOR, 0);
+  mknod("stats", KMOD_TRACE_MAJOR, 0);
   dup(0);  // stdout
   dup(0);  // stderr
 

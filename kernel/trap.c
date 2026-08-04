@@ -183,6 +183,7 @@ clockintr()
     ticks++;
     wakeup(&ticks);
     release(&tickslock);
+    module_notify_tick();
   }
 
   // 写 stimecmp 安排下一次中断，同时清除当前中断请求。

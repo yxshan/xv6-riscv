@@ -64,6 +64,22 @@ procinit(void)
   }
 }
 
+// 返回当前非 UNUSED 状态的进程数，供 sysinfo 等模块读取。
+int
+proccount(void)
+{
+  int n = 0;
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED)
+      n++;
+    release(&p->lock);
+  }
+  return n;
+}
+
 // 返回当前 CPU 的编号。
 // 调用前必须关闭中断，防止进程在这期间被调度到其他 CPU。
 int
@@ -126,6 +142,7 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  p->priority = 50;
   p->state = USED;
 
   // 分配保存用户寄存器现场的 trapframe 页面。
@@ -291,6 +308,7 @@ kfork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
+  np->priority = p->priority;
 
   pid = np->pid;
 
@@ -303,6 +321,8 @@ kfork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
+
+  module_notify_proc_fork(np);
 
   return pid;
 }
@@ -359,6 +379,8 @@ kexit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
+
+  module_notify_proc_exit(p);
 
   release(&wait_lock);
 
@@ -434,26 +456,61 @@ scheduler(void)
     intr_off();
 
     int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
+    struct proc *best = 0;
+    int bestprio = 256;
+
+    // 选择 RUNNABLE 中优先级最高（数值最小）的进程。
+    for(p = proc; p < &proc[NPROC]; p++){
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
+      if(p->state == RUNNABLE && p->priority < bestprio){
+        best = p;
+        bestprio = p->priority;
+      }
+      release(&p->lock);
+    }
+
+    if(best){
+      acquire(&best->lock);
+      if(best->state == RUNNABLE){
         // 切入选中的进程。被切换出去的进程会负责在回到这里前
         // 释放并重新获取自己的 p->lock。
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+        best->state = RUNNING;
+        c->proc = best;
+        swtch(&c->context, &best->context);
 
         // 进程暂时运行结束，回到调度器；它应已修改自己的状态。
         c->proc = 0;
         found = 1;
       }
-      release(&p->lock);
+      release(&best->lock);
     }
+
     if(found == 0) {
       // 没有可运行进程时，用 wfi 让 CPU 休眠直到中断到来。
       asm volatile("wfi");
     }
   }
+}
+
+// 设置指定进程的调度优先级。优先级范围 0-255。
+int
+ksetpriority(int pid, int prio)
+{
+  struct proc *p;
+
+  if(prio < 0 || prio > 255)
+    return -1;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid){
+      p->priority = prio;
+      release(&p->lock);
+      return 0;
+    }
+    release(&p->lock);
+  }
+  return -1;
 }
 
 // 从当前进程切换回调度器。
@@ -507,6 +564,9 @@ forkret(void)
     // 文件系统初始化可能睡眠等待锁，必须在普通进程上下文中完成，
     // 所以放在第一个进程第一次调度时执行，而不是 main() 里。
     fsinit(ROOTDEV);
+
+    // 文件系统就绪后初始化所有内核模块。
+    module_init_all();
 
     first = 0;
     // ensure other cores see first=0.
