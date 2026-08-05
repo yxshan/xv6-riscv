@@ -137,7 +137,21 @@ make kernel/kernel fs.img
 
 CI 使用 `cpus: [1, 3]` 矩阵，并在失败时上传 `test-xv6.out`。
 
-## 7. 测试约定
+## 7. 进程资源管理
+
+为避免 QEMU 和 `make` 残留进程占满系统资源：
+
+- `test-xv6.py` 每次运行只构建一次内核与文件系统镜像。
+- 干净镜像缓存为 `fs.img.clean` / `fs2.img.clean`，crash 多次重启直接复制。
+- QEMU 直接由 Python 启动并放入独立进程组，`stop()` / `crash()` 会终止整个进程组。
+- 脚本注册 SIGINT/SIGTERM 处理，中断时强制清理活动 QEMU。
+- 手工清理残留 QEMU：
+
+```bash
+make kill-qemu
+```
+
+## 8. 测试约定
 
 - 每个测试函数在一个独立子进程中运行，失败时以非 0 状态退出。
 - 测试输出统一为 `test <name>: OK / FAILED`。
@@ -204,13 +218,13 @@ P2 批次四新增回归用例：
 - `SELFTEST_CMD_SIGNAL`：当前进程信号活动状态。
 - `SELFTEST_CMD_MEMORY`：COW 引用计数与共享内存段不变量。
 
-## 8. 后续可扩展方向
+## 9. 后续可扩展方向
 
 - 宿主机构建单元测试：覆盖无硬件依赖的纯逻辑。
 - 随机 syscall 压力测试：结合 QEMU 超时和崩溃检测。
 - 更多 CI 矩阵：多工具链、多 QEMU 版本。
 
-## 9. 相关文档
+## 10. 相关文档
 
 - [xv6-riscv-module-refinement.md](xv6-riscv-module-refinement.md)
 - [xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

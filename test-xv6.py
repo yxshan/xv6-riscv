@@ -20,6 +20,11 @@ args = parser.parse_args()
 
 _active_qemus = []
 
+def _build_once():
+    run(["make", "kernel/kernel", "fs.img", "fs2.img"], check=True)
+    shutil.copyfile("fs.img", "fs.img.clean")
+    shutil.copyfile("fs2.img", "fs2.img.clean")
+
 def _kill_active_qemus():
     for q in _active_qemus:
         if q.proc.poll() is None:
@@ -30,14 +35,18 @@ def _kill_active_qemus():
 
 atexit.register(_kill_active_qemus)
 
+def _signal_handler(sig, frame):
+    _kill_active_qemus()
+    sys.exit(128 + sig)
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+
 class QEMU(object):
 
     def __init__(self, reset=False):
         if reset:
-            self.build_xv6()
             self.reset_fs()
-        else:
-            run(["make", "kernel/kernel", "fs.img", "fs2.img"], check=True)
         q = ["qemu-system-riscv64",
              "-machine", "virt",
              "-bios", "none",
@@ -60,23 +69,11 @@ class QEMU(object):
         time.sleep(1)
 
     def reset_fs(self):
-        try:
-            if not os.path.exists("fs.img.clean") or \
-               not os.path.exists("fs2.img.clean"):
-                run(["make", "fs.img", "fs2.img"], check=True)
-                shutil.copyfile("fs.img", "fs.img.clean")
-                shutil.copyfile("fs2.img", "fs2.img.clean")
-            else:
-                shutil.copyfile("fs.img.clean", "fs.img")
-                shutil.copyfile("fs2.img.clean", "fs2.img")
-        except subprocess.CalledProcessError as e:
-            print(f"Command failed with exit code {e.returncode}")
-
-    def build_xv6(self):
-        try:
-            run(["make", "kernel/kernel"], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Command failed with exit code {e.returncode}")
+        if not os.path.exists("fs.img.clean") or \
+           not os.path.exists("fs2.img.clean"):
+            _build_once()
+        shutil.copyfile("fs.img.clean", "fs.img")
+        shutil.copyfile("fs2.img.clean", "fs2.img")
 
     def save_output(self):
       try:
@@ -336,6 +333,7 @@ def main():
     for clean in ("fs.img.clean", "fs2.img.clean"):
         if os.path.exists(clean):
             os.remove(clean)
+    _build_once()
     print(args)
     rex = r'%s' % args.testrex
     funcs = [(obj,name) for name,obj in inspect.getmembers(sys.modules[__name__]) 

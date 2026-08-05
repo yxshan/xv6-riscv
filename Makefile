@@ -280,6 +280,9 @@ test: test-quick
 test-all: test
 	./test-xv6.py crash
 
+kill-qemu:
+	pkill -9 -f qemu-system-riscv64 || true
+
 QEMU_VERSION := $(shell $(QEMU) --version | head -n 1 | sed -E 's/^QEMU emulator version ([0-9]+\.[0-9]+)\..*/\1/')
 check-qemu-version:
 	@if [ "$(shell echo "$(QEMU_VERSION) >= $(MIN_QEMU_VERSION)" | bc)" -eq 0 ]; then \
