@@ -20,6 +20,7 @@ plicinit(void)
   // 为 UART 和 virtio 磁盘设置非 0 优先级，否则中断会被禁用。
   *(uint32*)(PLIC + UART0_IRQ*4) = 1;
   *(uint32*)(PLIC + VIRTIO0_IRQ*4) = 1;
+  *(uint32*)(PLIC + VIRTIO1_IRQ*4) = 1;
 }
 
 void
@@ -28,7 +29,8 @@ plicinithart(void)
   int hart = cpuid();
   
   // 允许当前 hart 的 S-mode 接收 UART 和 virtio 磁盘中断。
-  *(uint32*)PLIC_SENABLE(hart) = (1 << UART0_IRQ) | (1 << VIRTIO0_IRQ);
+  *(uint32*)PLIC_SENABLE(hart) =
+    (1 << UART0_IRQ) | (1 << VIRTIO0_IRQ) | (1 << VIRTIO1_IRQ);
 
   // 优先级阈值设为 0，即所有非 0 优先级中断都会触发。
   *(uint32*)PLIC_SPRIORITY(hart) = 0;

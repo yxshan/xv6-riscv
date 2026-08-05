@@ -21,6 +21,10 @@
 #define VIRTIO0 0x10001000
 #define VIRTIO0_IRQ 1
 
+// 第二个 virtio 块设备位于下一个 MMIO 总线槽位。
+#define VIRTIO1 0x10002000
+#define VIRTIO1_IRQ 2
+
 // PLIC 负责汇总外部设备中断并分发给各 hart。
 #define PLIC 0x0c000000L
 #define PLIC_PRIORITY (PLIC + 0x0)

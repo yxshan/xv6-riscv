@@ -211,6 +211,9 @@ UPROGS=\
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN)
 	mkfs/mkfs fs.img README.md $(UPROGS) $(DYNMOD_BIN)
 
+fs2.img: mkfs/mkfs README.md $U/_echo
+	mkfs/mkfs fs2.img README.md $U/_echo
+
 -include kernel/*.d kernel/module/*.d kernel/modules/*.d user/*.d user/modules/*.d user/tests/*.d
 
 clean: 
@@ -221,7 +224,7 @@ clean:
 	user/modules/*.o user/modules/*.d $(UMOD_BINS) \
 	user/tests/*.o user/tests/*.d user/tests/*.asm user/tests/*.sym \
 	$(DYNMOD_OBJ) $(DYNMOD_BIN) \
-	$K/kernel fs.img \
+	$K/kernel fs.img fs2.img \
 	mkfs/mkfs .gdbinit \
         $U/usys.S \
 	$(UPROGS)
@@ -240,14 +243,16 @@ QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nogr
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+QEMUOPTS += -drive file=fs2.img,if=none,format=raw,id=x1
+QEMUOPTS += -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
 
-qemu: check-qemu-version $K/kernel fs.img
+qemu: check-qemu-version $K/kernel fs.img fs2.img
 	$(QEMU) $(QEMUOPTS)
 
 .gdbinit: .gdbinit.tmpl-riscv
 	sed "s/:1234/:$(GDBPORT)/" < $^ > $@
 
-qemu-gdb: $K/kernel .gdbinit fs.img
+qemu-gdb: $K/kernel .gdbinit fs.img fs2.img
 	@echo "*** Now run 'gdb' in another window." 1>&2
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
 

@@ -25,7 +25,8 @@ class QEMU(object):
         q = ["make", "qemu"]
         self.proc = subprocess.Popen(q, stdin=subprocess.PIPE,
                                       stdout=subprocess.PIPE,
-                                      stderr=subprocess.STDOUT)
+                                      stderr=subprocess.STDOUT,
+                                      start_new_session=True)
         self.output = ""
         self.outbytes = bytearray()       
         time.sleep(1)
@@ -69,7 +70,9 @@ class QEMU(object):
             os.kill(pid, signal.SIGKILL)
 
     def stop(self):
-        self.proc.terminate()
+        if self.proc.poll() is None:
+            os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
+            self.proc.wait()
 
     def read(self):
         buf = os.read(self.proc.stdout.fileno(), 4096)
@@ -247,6 +250,12 @@ def test_tools():
     q.monitor("^pid .* ps", timeout=60)
     q.cmd("id\n")
     q.monitor("^\\$ uid=0 gid=0 euid=0 egid=0|^uid=0 gid=0 euid=0 egid=0", timeout=60)
+    q.cmd("ls /disk1\n")
+    q.monitor("^echo ", timeout=60)
+    q.cmd("cat /disk1/README.md\n")
+    q.monitor(".*# xv6-riscv", timeout=60)
+    q.cmd("echo x > /disk1/readonly\n")
+    q.monitor(".*open /disk1/readonly failed", timeout=60)
     q.stop()
     print("OK")
 

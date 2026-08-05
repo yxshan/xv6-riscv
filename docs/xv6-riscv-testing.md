@@ -182,6 +182,15 @@ P2 批次三新增回归用例：
 
 - `dynmod_badelf`：非 ELF 动态模块文件应被拒绝，加载失败可安全回滚。
 
+P2 批次四新增回归用例：
+
+- `disk1_read`：第二磁盘 `/disk1` 可读、可执行，且拒绝写打开与创建。
+
+工具测试新增：
+
+- `ls /disk1` 与 `cat /disk1/README.md` 验证第二磁盘只读挂载。
+- `echo x > /disk1/readonly` 验证第二磁盘写操作被拒绝。
+
 内核自测：
 
 - `SELFTEST_CMD_BASIC`：进程状态、MLFQ 队列、优先级和内存可用性。

@@ -1583,6 +1583,50 @@ outofinodes(char *s)
   }
 }
 
+// 第二磁盘通过 /disk1 只读挂载，可读文件与执行，但不能写。
+void
+disk1_read(char *s)
+{
+  struct stat st;
+  int fd, n;
+
+  if(stat("/disk1/README.md", &st) < 0 || st.size <= 0){
+    printf("%s: stat /disk1 failed\n", s);
+    exit(1);
+  }
+  if((fd = open("/disk1/README.md", O_RDONLY)) < 0){
+    printf("%s: open /disk1 failed\n", s);
+    exit(1);
+  }
+  n = read(fd, buf, 32);
+  close(fd);
+  if(n <= 0){
+    printf("%s: read /disk1 failed\n", s);
+    exit(1);
+  }
+  if(open("/disk1/README.md", O_WRONLY) >= 0 ||
+     open("/disk1/newfile", O_CREATE|O_WRONLY) >= 0){
+    printf("%s: second disk should be read-only\n", s);
+    exit(1);
+  }
+
+  int pid = fork();
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    char *argv[] = { "/disk1/echo", "disk1", 0 };
+    exec("/disk1/echo", argv);
+    exit(1);
+  }
+  if(wait(&n) != pid || n != 0){
+    printf("%s: exec from /disk1 failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 
 struct test fs_quicktests[] = {
   {truncate1, "truncate1"},
@@ -1610,6 +1654,7 @@ struct test fs_quicktests[] = {
   {rmdot, "rmdot"},
   {dirfile, "dirfile"},
   {iref, "iref"},
+  {disk1_read, "disk1_read"},
   { 0, 0},
 };
 struct test fs_slowtests[] = {

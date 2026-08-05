@@ -240,6 +240,41 @@ modunload
 make test-quick
 ```
 
+## P2 批次四：多磁盘支持
+
+状态：已完成
+
+完成内容：
+
+- virtio 驱动从单盘改为 `disks[NDISK]`，初始化两块 MMIO 磁盘。
+- PLIC 与 `devintr` 支持第二块磁盘中断。
+- 文件系统使用 `sb[dev]` 每设备超级块，根磁盘仍负责日志与回收。
+- `/disk1` 作为第二磁盘的只读挂载前缀，支持 `ls`、`cat`、`exec`。
+- 第二磁盘拒绝创建、删除、修改、打开写等操作，避免绕过日志。
+- `Makefile` 增加 `fs2.img` 和第二个 `-drive`，QEMU 双盘启动。
+- `test-xv6.py` 增加 `/disk1` 工具测试，并改为终止整个 QEMU 进程组。
+- 新增 `disk1_read` 用户态回归测试。
+
+涉及文件：
+
+- `kernel/param.h`、`kernel/memlayout.h`、`kernel/vm.c`
+- `kernel/virtio_disk.c`、`kernel/plic.c`、`kernel/trap.c`
+- `kernel/fs.c`、`kernel/sysfile.c`、`kernel/proc.c`
+- `Makefile`、`test-xv6.py`
+- `user/tests/fs_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img fs2.img
+usertests disk1_read
+ls /disk1
+cat /disk1/README.md
+/disk1/echo disk1-ok
+echo x > /disk1/readonly
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

@@ -41,6 +41,7 @@ kvmmake(void)
 
   // 映射 virtio 磁盘的 MMIO 控制接口。
   kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+  kvmmap(kpgtbl, VIRTIO1, VIRTIO1, PGSIZE, PTE_R | PTE_W);
 
   // 映射中断控制器 PLIC 的寄存器区域。
   kvmmap(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);

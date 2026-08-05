@@ -31,9 +31,8 @@
 #include "file.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
-// there should be one superblock per disk device, but we run with
-// only one device
-struct superblock sb; 
+// 每个磁盘设备一份超级块，dev 直接作为下标；第二磁盘当前按只读挂载使用。
+struct superblock sb[NDISK+1];
 
 // 读取超级块：它描述文件系统的总体布局（块数、inode 数、日志位置等）。
 static void
@@ -46,14 +45,16 @@ readsb(int dev, struct superblock *sb)
   brelse(bp);
 }
 
-// 初始化文件系统：校验超级块魔数，恢复日志，并回收孤立 inode。
+// 初始化文件系统：校验超级块魔数；根磁盘恢复日志并回收孤立 inode。
 void
 fsinit(int dev) {
-  readsb(dev, &sb);
-  if(sb.magic != FSMAGIC)
+  readsb(dev, &sb[dev]);
+  if(sb[dev].magic != FSMAGIC)
     panic("invalid file system");
-  initlog(dev, &sb);
-  ireclaim(dev);
+  if(dev == ROOTDEV){
+    initlog(dev, &sb[dev]);
+    ireclaim(dev);
+  }
 }
 
 // 把一个磁盘块清零。
@@ -79,9 +80,9 @@ balloc(uint dev)
   struct buf *bp;
 
   bp = 0;
-  for(b = 0; b < sb.size; b += BPB){
-    bp = bread(dev, BBLOCK(b, sb));
-    for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
+  for(b = 0; b < sb[dev].size; b += BPB){
+    bp = bread(dev, BBLOCK(b, sb[dev]));
+    for(bi = 0; bi < BPB && b + bi < sb[dev].size; bi++){
       m = 1 << (bi % 8);
       if((bp->data[bi/8] & m) == 0){  // 该位为 0 表示块空闲？
         bp->data[bi/8] |= m;  // 标记为已使用
@@ -104,7 +105,7 @@ bfree(int dev, uint b)
   struct buf *bp;
   int bi, m;
 
-  bp = bread(dev, BBLOCK(b, sb));
+  bp = bread(dev, BBLOCK(b, sb[dev]));
   bi = b % BPB;
   m = 1 << (bi % 8);
   if((bp->data[bi/8] & m) == 0)
@@ -218,8 +219,8 @@ ialloc(uint dev, short type)
   struct buf *bp;
   struct dinode *dip;
 
-  for(inum = 1; inum < sb.ninodes; inum++){
-    bp = bread(dev, IBLOCK(inum, sb));
+  for(inum = 1; inum < sb[dev].ninodes; inum++){
+    bp = bread(dev, IBLOCK(inum, sb[dev]));
     dip = (struct dinode*)bp->data + inum%IPB;
     if(dip->type == 0){  // 找到一个空闲 inode
       memset(dip, 0, sizeof(*dip));
@@ -243,7 +244,7 @@ iupdate(struct inode *ip)
   struct buf *bp;
   struct dinode *dip;
 
-  bp = bread(ip->dev, IBLOCK(ip->inum, sb));
+  bp = bread(ip->dev, IBLOCK(ip->inum, sb[ip->dev]));
   dip = (struct dinode*)bp->data + ip->inum%IPB;
   dip->type = ip->type;
   dip->major = ip->major;
@@ -317,7 +318,7 @@ ilock(struct inode *ip)
   acquiresleep(&ip->lock);
 
   if(ip->valid == 0){
-    bp = bread(ip->dev, IBLOCK(ip->inum, sb));
+    bp = bread(ip->dev, IBLOCK(ip->inum, sb[ip->dev]));
     dip = (struct dinode*)bp->data + ip->inum%IPB;
     ip->type = dip->type;
     ip->major = dip->major;
@@ -391,9 +392,9 @@ iunlockput(struct inode *ip)
 void
 ireclaim(int dev)
 {
-  for (int inum = 1; inum < sb.ninodes; inum++) {
+  for (int inum = 1; inum < sb[dev].ninodes; inum++) {
     struct inode *ip = 0;
-    struct buf *bp = bread(dev, IBLOCK(inum, sb));
+    struct buf *bp = bread(dev, IBLOCK(inum, sb[dev]));
     struct dinode *dip = (struct dinode *)bp->data + inum % IPB;
     if (dip->type != 0 && dip->nlink == 0) {  // is an orphaned inode
       printf("ireclaim: orphaned inode %d\n", inum);
@@ -702,6 +703,19 @@ skipelem(char *path, char *name)
   return path;
 }
 
+// 简单的只读挂载：/disk1 前缀映射到第二块磁盘的根 inode。
+// 返回设备号，并把 *rest 调整为挂载点之后的路径。
+static int
+mount_root(char *path, char **rest)
+{
+  if(strncmp(path, "/disk1", 6) == 0 && (path[6] == 0 || path[6] == '/')){
+    *rest = path + 6;
+    return DISK1DEV;
+  }
+  *rest = path;
+  return ROOTDEV;
+}
+
 // 解析路径并返回对应 inode。
 // nameiparent 非 0 时返回父目录 inode，并把最后一段路径元素
 // 复制到 name（至少 DIRSIZ 字节）。
@@ -711,10 +725,15 @@ namex(char *path, int nameiparent, char *name)
 {
   struct inode *ip, *next;
   int depth = 0;
+  int dev;
+  char *mntpath;
+
+  dev = mount_root(path, &mntpath);
+  path = mntpath;
 
   // 绝对路径从根 inode 开始，相对路径从当前目录开始。
-  if(*path == '/')
-    ip = iget(ROOTDEV, ROOTINO);
+  if(*path == '/' || dev != ROOTDEV)
+    ip = iget(dev, ROOTINO);
   else
     ip = idup(myproc()->cwd);
 
@@ -762,12 +781,15 @@ namex(char *path, int nameiparent, char *name)
       }
 
       if(target[0] == '/'){
-        // 绝对符号链接：从根目录重新解析。
+        // 绝对符号链接：从对应磁盘根目录重新解析。
         iput(ip);
-        ip = iget(ROOTDEV, ROOTINO);
+        dev = mount_root(target, &mntpath);
+        ip = iget(dev, ROOTINO);
+        path = mntpath;
+      } else {
+        // 相对符号链接：继续从当前目录解析，ip 已解锁。
+        path = target;
       }
-      // 相对符号链接：继续从当前目录解析，ip 已解锁。
-      path = target;
       continue;
     }
     iunlock(next);

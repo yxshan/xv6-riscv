@@ -727,6 +727,7 @@ forkret(void)
     fsinit(ROOTDEV);
 
     // 文件系统就绪后初始化所有内核模块。
+    fsinit(DISK1DEV);
     module_init_all();
 
     first = 0;

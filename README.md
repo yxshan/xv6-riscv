@@ -31,6 +31,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 命名管道 FIFO：`mkfifo`
 - 文件权限与用户/组：`chmod` / `chown` / `setuid` / `setgid` / `umask`
 - 需求分页与 `mmap`：文件/匿名私有映射，缺页时按需加载
+- 多磁盘支持：第二块 virtio 磁盘以 `/disk1` 只读挂载
 
 ## 目录结构
 
@@ -135,6 +136,18 @@ uid=0 gid=0 euid=0 egid=0
 $ echo hi > permfile
 $ chmod 600 permfile
 $ chown 1 1 permfile
+
+$ ls /disk1
+.              1 1 1024
+..             1 1 1024
+README.md      2 2 5696
+echo           2 3 37456
+
+$ cat /disk1/README.md
+# xv6-riscv
+
+$ echo x > /disk1/readonly
+open /disk1/readonly failed
 
 $ crashdump
 === kernel crash dump ===
