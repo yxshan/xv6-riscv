@@ -10,6 +10,7 @@
 
 import argparse, os, inspect, re, signal, subprocess, sys, time
 import atexit
+import shutil
 from subprocess import run
 
 parser = argparse.ArgumentParser()
@@ -60,8 +61,14 @@ class QEMU(object):
 
     def reset_fs(self):
         try:
-            run(["rm", "-f", "fs.img", "fs2.img"], check=True)
-            run(["make", "fs.img", "fs2.img"], check=True)
+            if not os.path.exists("fs.img.clean") or \
+               not os.path.exists("fs2.img.clean"):
+                run(["make", "fs.img", "fs2.img"], check=True)
+                shutil.copyfile("fs.img", "fs.img.clean")
+                shutil.copyfile("fs2.img", "fs2.img.clean")
+            else:
+                shutil.copyfile("fs.img.clean", "fs.img")
+                shutil.copyfile("fs2.img.clean", "fs2.img")
         except subprocess.CalledProcessError as e:
             print(f"Command failed with exit code {e.returncode}")
 
@@ -86,15 +93,12 @@ class QEMU(object):
         self.proc.stdin.flush()
         
     def crash(self):
-        pg = run(['pgrep', '-f', 'qemu-system-riscv64.*fs.img'],
-                 stdout=subprocess.PIPE, encoding='utf8')
-        kids = [int(line) for line in pg.stdout.splitlines()]
-        if len(kids) == 0:
-            print("no qemu")
-            sys.exit(1)
-        for pid in kids:
-            print("kill", pid)
-            os.kill(pid, signal.SIGKILL)
+        if self.proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            self.proc.wait()
 
     def stop(self):
         if self.proc.poll() is None:
@@ -327,6 +331,9 @@ def test_modules():
     print("OK")
 
 def main():
+    for clean in ("fs.img.clean", "fs2.img.clean"):
+        if os.path.exists(clean):
+            os.remove(clean)
     print(args)
     rex = r'%s' % args.testrex
     funcs = [(obj,name) for name,obj in inspect.getmembers(sys.modules[__name__]) 

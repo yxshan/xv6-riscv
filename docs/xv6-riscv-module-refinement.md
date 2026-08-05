@@ -275,6 +275,7 @@ echo disk1 > /disk1/newfile
 cat /disk1/newfile
 rm /disk1/newfile
 make test-quick
+./test-xv6.py crash
 ```
 
 ## 完善批次一：mmap 语义补全

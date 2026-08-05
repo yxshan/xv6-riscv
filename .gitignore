@@ -17,6 +17,8 @@ kernelmemfs
 kernel/kernel
 dynmod
 dynmod2
+fs.img.clean
+fs2.img.clean
 kernel/modules/dynmod_sample.elf
 user/usys.S
 .gdbinit
