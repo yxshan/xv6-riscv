@@ -330,12 +330,70 @@ dynmod_lifecycle(char *s)
     free(buf);
     exit(1);
   }
-  if(module_unload() != 0){
+  if(module_unload(0) != 0){
     printf("%s: module_unload failed\n", s);
     free(buf);
     exit(1);
   }
   free(buf);
+  exit(0);
+}
+
+// 多个动态模块应能同时驻留，并分别卸载。
+void
+dynmod_multi(char *s)
+{
+  char *buf;
+  struct stat st;
+  int fd, n;
+
+  fd = open("dynmod", O_RDONLY);
+  if(fd < 0 || fstat(fd, &st) < 0){
+    printf("%s: open dynmod failed\n", s);
+    exit(1);
+  }
+  buf = malloc(st.size);
+  if(buf == 0){
+    printf("%s: malloc dynmod failed\n", s);
+    exit(1);
+  }
+  n = read(fd, buf, st.size);
+  close(fd);
+  if(n != st.size || module_load((uint64)buf, n) != 0){
+    printf("%s: load dynmod slot 0 failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  free(buf);
+
+  fd = open("dynmod2", O_RDONLY);
+  if(fd < 0 || fstat(fd, &st) < 0){
+    printf("%s: open dynmod2 failed\n", s);
+    exit(1);
+  }
+  buf = malloc(st.size);
+  if(buf == 0){
+    printf("%s: malloc dynmod2 failed\n", s);
+    exit(1);
+  }
+  n = read(fd, buf, st.size);
+  close(fd);
+  if(n != st.size || module_load((uint64)buf, n) != 1){
+    printf("%s: load dynmod2 slot 1 failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  free(buf);
+
+  if(module_call(KMOD_DYN_SAMPLE, 1, 0, 0) != 0x1234 ||
+     module_call(KMOD_DYN_TWO, 1, 0, 0) != 0xABCD){
+    printf("%s: multi module call failed\n", s);
+    exit(1);
+  }
+  if(module_unload(0) != 0 || module_unload(1) != 0){
+    printf("%s: multi module unload failed\n", s);
+    exit(1);
+  }
   exit(0);
 }
 
@@ -407,6 +465,7 @@ struct test module_quicktests[] = {
   {signal_ignore, "signal_ignore"},
   {signal_default, "signal_default"},
   {dynmod_lifecycle, "dynmod_lifecycle"},
+  {dynmod_multi, "dynmod_multi"},
   {dynmod_badelf, "dynmod_badelf"},
   {kernel_selftest, "kernel_selftest"},
   { 0, 0},

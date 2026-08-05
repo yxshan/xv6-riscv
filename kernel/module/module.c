@@ -35,8 +35,13 @@ static int hooks_ready;
 static struct sysmod dynsys[KMOD_MAX_DYNAMIC];
 static struct spinlock dynlock;
 static int ndyn;
-static int dyn_loaded;
-static void (*dyn_exit)(void);
+static int current_dynslot;
+
+struct dynslot {
+  int used;
+  void (*exit)(void);
+};
+static struct dynslot dynslots[DYNMOD_NUM];
 
 #define ET_EXEC 2
 #define EM_RISCV 243
@@ -129,6 +134,7 @@ module_register(int id, const char *name, uint64 (*handler)(int, uint64, uint64)
   dynsys[ndyn].id = id;
   dynsys[ndyn].name = name;
   dynsys[ndyn].handle = handler;
+  dynsys[ndyn].slot = current_dynslot;
   ndyn++;
   release(&dynlock);
   return 0;
@@ -196,18 +202,32 @@ module_exit_register(void (*exit_fn)(void))
 {
   if(exit_fn == 0)
     return -1;
+  if(current_dynslot <= 0 || current_dynslot > DYNMOD_NUM)
+    return -1;
   acquire(&dynlock);
-  if(dyn_exit != 0){
+  if(dynslots[current_dynslot - 1].exit != 0){
     release(&dynlock);
     return -1;
   }
-  dyn_exit = exit_fn;
+  dynslots[current_dynslot - 1].exit = exit_fn;
   release(&dynlock);
   return 0;
 }
 
+static void
+dyn_remove_slot_locked(int slot)
+{
+  int j = 0;
+
+  for(int i = 0; i < ndyn; i++){
+    if(dynsys[i].slot != slot)
+      dynsys[j++] = dynsys[i];
+  }
+  ndyn = j;
+}
+
 static int
-module_load_elf(uint64 src, int len)
+module_load_elf(uint64 src, int len, uint64 base)
 {
   struct elfhdr eh;
   struct proghdr ph;
@@ -246,15 +266,15 @@ module_load_elf(uint64 src, int len)
       return -1;
     if(ph.filesz > 0 &&
        copyin(myproc()->pagetable,
-              (char*)(DYNMOD_BASE + (ph.vaddr - DYNMOD_BASE)),
+              (char*)(base + (ph.vaddr - DYNMOD_BASE)),
               src + ph.off, ph.filesz) < 0)
       return -1;
     if(ph.memsz > ph.filesz)
-      memset((void*)(DYNMOD_BASE + (ph.vaddr - DYNMOD_BASE) + ph.filesz), 0,
+      memset((void*)(base + (ph.vaddr - DYNMOD_BASE) + ph.filesz), 0,
              ph.memsz - ph.filesz);
   }
 
-  entry = eh.entry;
+  entry = base + (eh.entry - DYNMOD_BASE);
   api.printf = printf;
   api.module_register = module_register;
   api.module_unregister = module_unregister;
@@ -270,41 +290,56 @@ module_load_elf(uint64 src, int len)
 int
 module_load(uint64 src, int len)
 {
-  int r;
+  int r, slot = -1;
+  uint64 base;
 
-  if(len <= 0 || len > DYNMOD_SIZE || dyn_loaded)
+  if(len <= 0 || len > DYNMOD_SIZE)
+    return -1;
+  for(int i = 0; i < DYNMOD_NUM; i++){
+    if(!dynslots[i].used){
+      slot = i;
+      break;
+    }
+  }
+  if(slot < 0)
     return -1;
 
-  memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
-  ndyn = 0;
-  dyn_exit = 0;
-  if((r = module_load_elf(src, len)) < 0){
+  base = DYNMOD_BASE + (uint64)slot * DYNMOD_SIZE;
+  memset((void*)base, 0, DYNMOD_SIZE);
+  current_dynslot = slot + 1;
+  if((r = module_load_elf(src, len, base)) < 0){
     acquire(&dynlock);
-    ndyn = 0;
+    dyn_remove_slot_locked(slot + 1);
     release(&dynlock);
-    dyn_exit = 0;
-    memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
+    dynslots[slot].used = 0;
+    dynslots[slot].exit = 0;
+    current_dynslot = 0;
+    memset((void*)base, 0, DYNMOD_SIZE);
     return -1;
   }
 
-  dyn_loaded = 1;
-  return 0;
+  dynslots[slot].used = 1;
+  current_dynslot = 0;
+  return slot;
 }
 
 int
-module_unload(void)
+module_unload(int slot)
 {
-  if(!dyn_loaded)
+  uint64 base;
+
+  if(slot < 0 || slot >= DYNMOD_NUM || !dynslots[slot].used)
     return -1;
 
-  if(dyn_exit)
-    dyn_exit();
+  base = DYNMOD_BASE + (uint64)slot * DYNMOD_SIZE;
+  if(dynslots[slot].exit)
+    dynslots[slot].exit();
   acquire(&dynlock);
-  ndyn = 0;
+  dyn_remove_slot_locked(slot + 1);
   release(&dynlock);
-  dyn_exit = 0;
-  dyn_loaded = 0;
-  memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
+  dynslots[slot].used = 0;
+  dynslots[slot].exit = 0;
+  memset((void*)base, 0, DYNMOD_SIZE);
   return 0;
 }
 
@@ -336,7 +371,10 @@ sys_module_load(void)
 uint64
 sys_module_unload(void)
 {
-  return module_unload();
+  int slot;
+
+  argint(0, &slot);
+  return module_unload(slot);
 }
 
 void

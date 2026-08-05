@@ -43,6 +43,8 @@
 // 该区域从物理页分配器中保留，避免与普通内核内存冲突。
 #define DYNMOD_BASE 0x80040000L
 #define DYNMOD_SIZE (4*4096)
+#define DYNMOD_NUM 4
+#define DYNMOD_AREA_SIZE (DYNMOD_SIZE * DYNMOD_NUM)
 
 // trampoline 是处理陷阱的跳板代码，被同时映射到内核和用户地址空间的最高页。
 // 这样用户态陷入内核时，页表切换前后 PC 仍能落在同一段代码上。

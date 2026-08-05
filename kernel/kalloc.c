@@ -42,7 +42,7 @@ freerange(void *pa_start, void *pa_end)
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
     // 跳过动态模块保留区域，防止被普通物理页分配器使用。
-    if((uint64)p >= DYNMOD_BASE && (uint64)p < DYNMOD_BASE + DYNMOD_SIZE)
+    if((uint64)p >= DYNMOD_BASE && (uint64)p < DYNMOD_BASE + DYNMOD_AREA_SIZE)
       continue;
     kfree(p);
   }

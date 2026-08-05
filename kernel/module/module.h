@@ -27,6 +27,7 @@ struct sysmod {
   int id;
   const char *name;
   uint64 (*handle)(int cmd, uint64 arg0, uint64 arg1);
+  int slot; // 动态模块槽位，静态模块为 0
 };
 
 // 事件钩子集合。模块通过 KMOD_HOOKREG 注册到 .kmod_hooks 链接段。
@@ -82,6 +83,6 @@ int module_register(int id, const char *name, uint64 (*handler)(int, uint64, uin
 int module_unregister(int id);
 int module_registry_check(void);
 int module_load(uint64 src, int len);
-int module_unload(void);
+int module_unload(int slot);
 
 #endif

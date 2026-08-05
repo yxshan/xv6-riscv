@@ -6,6 +6,7 @@
 #define KMOD_TRACE   2
 #define KMOD_DYN_SAMPLE 3
 #define KMOD_SELFTEST 4
+#define KMOD_DYN_TWO 5
 
 // sysinfo 设备主设备号（预留）。
 #define KMOD_SYSINFO_MAJOR 2

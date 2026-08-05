@@ -26,7 +26,7 @@ int pause(int);
 int uptime(void);
 uint64 module_call(int, int, uint64, uint64);
 int module_load(uint64, int);
-int module_unload(void);
+int module_unload(int);
 int setpriority(int, int);
 int symlink(const char*, const char*);
 int mkfifo(const char*, int);

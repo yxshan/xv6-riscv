@@ -448,7 +448,7 @@ xv6 不能做到 Linux 那样的动态模块加载，但完全可以做到“编
 - 伪设备节点 `/sysinfo`：`cat sysinfo` 可直接读取系统信息
 - 用户态模块目录自动扫描：`user/modules/*.c` 自动生成 `user/_*`
 - 示例用户模块 `hello`：`user/modules/hello.c`
-- 动态模块加载：`modload dynmod` / `modunload`
+- 动态模块加载：`modload dynmod` / `modunload 0`
 - 用户态工具 `user/modcli.c`
 - P0 工具：`strace`、`perf`、`prio`、`procinfo`
 - 进程优先级调度与 `setpriority`
@@ -470,33 +470,32 @@ xv6 不能做到 Linux 那样的动态模块加载，但完全可以做到“编
 尚未落地：
 
 - ELF 重定位与内核符号解析
-- 多个动态模块同时加载
 
 ## 14. 动态模块加载说明
 
 当前实现是教学级动态加载器，采用固定地址 ELF 格式：
 
 1. 动态模块链接为固定地址 `DYNMOD_BASE` 的 ELF 可执行文件；
-2. 内核解析 ELF 程序头，把 LOAD 段复制到 `DYNMOD_BASE` 并清零 BSS；
-3. 用户程序 `modload` 读取文件并调用 `module_load` 系统调用；
-4. 加载器以 ELF `e_entry` 为入口调用 `module_entry()`；
+2. 内核解析 ELF 程序头，把 LOAD 段复制到指定槽位并清零 BSS；
+3. 用户程序 `modload` 读取文件并调用 `module_load` 系统调用，返回槽位号；
+4. 加载器以槽位基址 + ELF 入口偏移调用 `module_entry()`；
 5. 模块通过 API 函数指针注册 `module_call` 处理器；
-6. `modunload` 清除动态注册表并清空模块区域。
+6. `modunload <slot>` 清除对应槽位的注册表并清空模块区域。
 
 示例命令：
 
 ```text
 modload dynmod
 modcli 3 1
-modunload
+modunload 0
 ```
 
 已知限制：
 
 - 不解析 ELF 重定位，不解析内核符号；
 - 动态模块只能通过 `struct kmod_api` 访问内核功能；
-- 同时只支持一个动态模块；
-- 只有单一模块级退出回调，不支持多模块并行。
+- 固定提供 4 个模块槽位，模块仍链接到 `DYNMOD_BASE` 后线性搬移；
+- 每个槽位独立保存退出回调，支持多模块并行驻留。
 
 当前新增一个内核模块的流程是：
 

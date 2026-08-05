@@ -308,6 +308,44 @@ usertests mmap_shared_partial
 make test-quick
 ```
 
+## 完善批次二：动态模块多实例
+
+状态：已完成
+
+完成内容：
+
+- 动态模块区域扩展为 4 个槽位，每个槽位独立清空、加载和卸载。
+- `module_load` 返回槽位号，`module_unload(slot)` 按槽位卸载。
+- 每个槽位独立保存退出回调，卸载时只移除本槽位注册的 `module_call` 处理器。
+- 新增第二个动态模块 `dynmod2`，模块 ID 为 `KMOD_DYN_TWO`。
+- 新增 `dynmod_multi` 测试，验证两个模块同时驻留并分别卸载。
+- 更新 `modunload` 工具支持槽位参数，默认卸载槽位 0。
+
+涉及文件：
+
+- `kernel/memlayout.h`、`kernel/kalloc.c`、`kernel/vm.c`
+- `kernel/module/module.h`、`kernel/module/module.c`
+- `kernel/module/module_ids.h`
+- `kernel/modules/dynmod_two.c`
+- `Makefile`
+- `user/modunload.c`
+- `user/tests/module_tests.c`
+- `test-xv6.py`
+
+验证命令：
+
+```bash
+make kernel/kernel dynmod dynmod2 fs.img
+usertests dynmod_lifecycle
+usertests dynmod_multi
+modload dynmod
+modload dynmod2
+modcli 3 1
+modcli 5 1
+modunload 0
+modunload 1
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

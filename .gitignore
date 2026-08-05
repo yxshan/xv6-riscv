@@ -16,6 +16,7 @@ kernelmemfs
 /mkfs/mkfs
 kernel/kernel
 dynmod
+dynmod2
 kernel/modules/dynmod_sample.elf
 user/usys.S
 .gdbinit

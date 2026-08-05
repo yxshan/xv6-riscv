@@ -37,7 +37,7 @@ OBJS = \
 
 # 自动收集模块目录下的内核源文件，新增模块无需再改 OBJS。
 # dynmod_sample.c 是动态模块，编译为独立二进制，不能链接进内核。
-KMOD_OBJS = $(filter-out $K/modules/dynmod_sample.o,$(patsubst %.c,%.o,$(wildcard $K/module/*.c $K/modules/*.c)))
+KMOD_OBJS = $(filter-out $K/modules/dynmod_sample.o $K/modules/dynmod_two.o,$(patsubst %.c,%.o,$(wildcard $K/module/*.c $K/modules/*.c)))
 OBJS += $(KMOD_OBJS)
 
 # 自动收集 user/modules 下的用户程序，新增用户模块无需改 UPROGS。
@@ -51,6 +51,9 @@ UTEST_OBJS = $(patsubst %.c,%.o,$(UTEST_SRCS))
 DYNMOD_SRC = $K/modules/dynmod_sample.c
 DYNMOD_OBJ = $K/modules/dynmod_sample.o
 DYNMOD_BIN = dynmod
+DYNMOD2_SRC = $K/modules/dynmod_two.c
+DYNMOD2_OBJ = $K/modules/dynmod_two.o
+DYNMOD2_BIN = dynmod2
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
@@ -148,6 +151,10 @@ $(DYNMOD_BIN): $(DYNMOD_SRC) $K/module/dynmod.ld
 	$(CC) $(CFLAGS) -fno-pic -c -o $(DYNMOD_OBJ) $(DYNMOD_SRC)
 	$(LD) -T $K/module/dynmod.ld -o $@ $(DYNMOD_OBJ)
 
+$(DYNMOD2_BIN): $(DYNMOD2_SRC) $K/module/dynmod.ld
+	$(CC) $(CFLAGS) -fno-pic -c -o $(DYNMOD2_OBJ) $(DYNMOD2_SRC)
+	$(LD) -T $K/module/dynmod.ld -o $@ $(DYNMOD2_OBJ)
+
 $U/usys.S : $U/usys.pl
 	perl $U/usys.pl > $U/usys.S
 
@@ -208,8 +215,8 @@ UPROGS=\
 	$U/_permexec\
 	$(UMOD_BINS)\
 
-fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN)
-	mkfs/mkfs fs.img README.md $(UPROGS) $(DYNMOD_BIN)
+fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
+	mkfs/mkfs fs.img README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
 
 fs2.img: mkfs/mkfs README.md $U/_echo
 	mkfs/mkfs fs2.img README.md $U/_echo
@@ -223,7 +230,7 @@ clean:
 	kernel/modules/*.o kernel/modules/*.d \
 	user/modules/*.o user/modules/*.d $(UMOD_BINS) \
 	user/tests/*.o user/tests/*.d user/tests/*.asm user/tests/*.sym \
-	$(DYNMOD_OBJ) $(DYNMOD_BIN) \
+	$(DYNMOD_OBJ) $(DYNMOD_BIN) $(DYNMOD2_OBJ) $(DYNMOD2_BIN) \
 	$K/kernel fs.img fs2.img \
 	mkfs/mkfs .gdbinit \
         $U/usys.S \

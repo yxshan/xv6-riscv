@@ -53,11 +53,11 @@ kvmmake(void)
   kvmmap(kpgtbl, (uint64)etext, (uint64)etext, DYNMOD_BASE-(uint64)etext, PTE_R | PTE_W);
 
   // 动态模块区域单独映射为可读可写可执行。
-  kvmmap(kpgtbl, DYNMOD_BASE, DYNMOD_BASE, DYNMOD_SIZE, PTE_R | PTE_W | PTE_X);
+  kvmmap(kpgtbl, DYNMOD_BASE, DYNMOD_BASE, DYNMOD_AREA_SIZE, PTE_R | PTE_W | PTE_X);
 
   // 动态模块区域之后的 RAM 映射为可读写。
-  kvmmap(kpgtbl, DYNMOD_BASE + DYNMOD_SIZE, DYNMOD_BASE + DYNMOD_SIZE,
-         PHYSTOP - (DYNMOD_BASE + DYNMOD_SIZE), PTE_R | PTE_W);
+  kvmmap(kpgtbl, DYNMOD_BASE + DYNMOD_AREA_SIZE, DYNMOD_BASE + DYNMOD_AREA_SIZE,
+         PHYSTOP - (DYNMOD_BASE + DYNMOD_AREA_SIZE), PTE_R | PTE_W);
 
   // trampoline 映射在最高虚拟地址，用户和内核页表映射同一物理页，
   // 使陷阱发生时切换页表不会导致执行流“丢失”。
