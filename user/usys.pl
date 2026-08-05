@@ -69,3 +69,5 @@ entry("getegid");
 entry("setuid");
 entry("setgid");
 entry("umask");
+entry("mmap");
+entry("munmap");

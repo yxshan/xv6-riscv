@@ -45,3 +45,5 @@
 #define SYS_setuid 42
 #define SYS_setgid 43
 #define SYS_umask 44
+#define SYS_mmap 45
+#define SYS_munmap 46

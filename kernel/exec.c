@@ -96,6 +96,9 @@ kexec(char *path, char **argv)
   p = myproc();
   uint64 oldsz = p->sz;
 
+  // exec 成功提交前释放旧进程的 mmap 区域。
+  vma_clear(p);
+
   // 在段结束处分配用户栈页。
   // 最上面一页不设置 PTE_U，作为保护页捕获栈溢出；
   // 其余页作为用户栈。

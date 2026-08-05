@@ -200,7 +200,14 @@ P1 剩余项已全部完成。
   `getegid`、`setuid`、`setgid`、`umask`
 - 新增工具与测试：`id`、`chmod`、`chown`、`permexec` 和权限测试套件
 
-剩余方向：需求分页与 `mmap`、动态模块 ELF 化、多磁盘支持。
+第二批已完成：
+
+- 需求分页与 `mmap`：文件与匿名私有映射、按需缺页加载
+- 每个进程维护固定数量 VMA，fork 时复制映射，exec/exit 时统一清理
+- `munmap` 解除映射并释放已驻留页面
+- 新增 `user/tests/mmap_tests.c` 测试套件
+
+剩余方向：动态模块 ELF 化、多磁盘支持。
 
 ### P2：进阶方向
 

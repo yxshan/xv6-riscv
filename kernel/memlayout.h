@@ -50,9 +50,13 @@
 
 // 用户地址空间从低地址到高地址依次为：
 //   代码段(text)、数据段、固定大小栈、可扩展堆，
-//   然后是 TRAPFRAME（保存用户寄存器现场）和 TRAMPOLINE。
+//   然后是 mmap 区域、共享内存区域、TRAPFRAME 和 TRAMPOLINE。
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
 
 // 共享内存映射区域，位于 TRAPFRAME 下方。
 #define SHM_BASE (TRAPFRAME - 64*PGSIZE)
 #define SHM_MAX_SIZE (32*PGSIZE)
+
+// mmap 私有映射区域，位于共享内存区域下方，从高地址向下分配。
+#define MMAP_BASE (SHM_BASE - 256*PGSIZE)
+#define MMAP_SIZE (SHM_BASE - MMAP_BASE)

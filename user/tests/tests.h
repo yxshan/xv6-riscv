@@ -36,5 +36,7 @@ extern struct test module_quicktests[];
 extern struct test module_slowtests[];
 extern struct test perm_quicktests[];
 extern struct test perm_slowtests[];
+extern struct test mmap_quicktests[];
+extern struct test mmap_slowtests[];
 
 #endif

@@ -476,8 +476,10 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   while(got_null == 0 && max > 0){
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
+    if(pa0 == 0){
+      if((pa0 = vmfault(pagetable, va0, 1)) == 0)
+        return -1;
+    }
     n = PGSIZE - (srcva - va0);
     if(n > max)
       n = max;
@@ -513,12 +515,18 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 uint64
 vmfault(pagetable_t pagetable, uint64 va, int read)
 {
-  uint64 mem;
+  uint64 mem, pa;
   struct proc *p = myproc();
+
+  (void)read;
+  va = PGROUNDDOWN(va);
+
+  // mmap 映射优先按 VMA 缺页，从文件读取或补零页。
+  if((pa = vma_fault(p, va)) != 0)
+    return pa;
 
   if (va >= p->sz)
     return 0;
-  va = PGROUNDDOWN(va);
   if(ismapped(pagetable, va)) {
     return 0;
   }

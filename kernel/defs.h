@@ -221,6 +221,14 @@ int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             ismapped(pagetable_t, uint64);
 uint64          vmfault(pagetable_t, uint64, int);
 
+// vma.c
+uint64          vma_alloc(struct proc*, uint64);
+int             vma_add(struct proc*, uint64, uint64, int, int, struct inode*, uint);
+int             vma_remove(struct proc*, uint64, uint64);
+void            vma_clear(struct proc*);
+int             vma_copy(struct proc*, struct proc*);
+uint64          vma_fault(struct proc*, uint64);
+
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);

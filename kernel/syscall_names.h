@@ -49,6 +49,8 @@
   X(SYS_getegid, getegid) \
   X(SYS_setuid, setuid) \
   X(SYS_setgid, setgid) \
-  X(SYS_umask, umask)
+  X(SYS_umask, umask) \
+  X(SYS_mmap, mmap) \
+  X(SYS_munmap, munmap)
 
 #endif

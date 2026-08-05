@@ -669,7 +669,7 @@ lazy_sbrk(char *s)
     p = sbrklazy(0);
   }
 
-  int n = SHM_BASE-PGSIZE-(uint64)p;
+  int n = MMAP_BASE-PGSIZE-(uint64)p;
 
   char *p1 = sbrklazy(n);
   if (p1 < 0 || p1 != p) {
@@ -678,8 +678,8 @@ lazy_sbrk(char *s)
   }
 
   p = sbrk(PGSIZE);
-  if (p < 0 || (uint64)p != SHM_BASE-PGSIZE) {
-    printf("sbrk(%d) returned %p, not expected SHM_BASE-PGSIZE\n", PGSIZE, p);
+  if (p < 0 || (uint64)p != MMAP_BASE-PGSIZE) {
+    printf("sbrk(%d) returned %p, not expected MMAP_BASE-PGSIZE\n", PGSIZE, p);
     exit(1);
   }
 

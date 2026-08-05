@@ -47,6 +47,8 @@ int getegid(void);
 int setuid(int);
 int setgid(int);
 int umask(int);
+char* mmap(char*, uint, int, int, int, uint);
+int munmap(char*, uint);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -8,6 +8,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "param.h"
+#include "memlayout.h"
 #include "stat.h"
 #include "spinlock.h"
 #include "proc.h"
@@ -709,4 +710,80 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+// mmap：创建私有文件映射或匿名映射，地址由内核在 mmap 区域分配。
+uint64
+sys_mmap(void)
+{
+  uint64 addr, length, start, end;
+  int prot, flags, fd, off;
+  struct file *f = 0;
+  struct inode *ip = 0;
+  struct proc *p = myproc();
+  uint64 npages;
+
+  argaddr(0, &addr);
+  argaddr(1, &length);
+  argint(2, &prot);
+  argint(3, &flags);
+  argint(4, &fd);
+  argint(5, &off);
+
+  if(addr != 0 || length == 0 || length > MMAP_SIZE || off < 0)
+    return -1;
+  if((flags & MAP_PRIVATE) == 0 || (flags & MAP_FIXED))
+    return -1;
+
+  if(fd < 0){
+    if((flags & MAP_ANONYMOUS) == 0)
+      return -1;
+  } else {
+    if((flags & MAP_ANONYMOUS) || argfd(4, &fd, &f) < 0 ||
+       f->type != FD_INODE)
+      return -1;
+    if((prot & PROT_READ) && !f->readable)
+      return -1;
+
+    ip = idup(f->ip);
+    ilock(ip);
+    if(ip->type != T_FILE || (uint64)off + length > (uint64)ip->size){
+      iunlockput(ip);
+      return -1;
+    }
+    iunlock(ip);
+  }
+
+  npages = PGROUNDUP(length) / PGSIZE;
+  start = vma_alloc(p, npages);
+  if(start == 0){
+    if(ip){
+      begin_op();
+      iput(ip);
+      end_op();
+    }
+    return -1;
+  }
+  end = start + npages * PGSIZE;
+  if(vma_add(p, start, end, prot, flags, ip, (uint)off) < 0){
+    if(ip){
+      begin_op();
+      iput(ip);
+      end_op();
+    }
+    return -1;
+  }
+  return start;
+}
+
+// munmap：解除 mmap 建立的完整映射。
+uint64
+sys_munmap(void)
+{
+  uint64 addr, length;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+  argaddr(1, &length);
+  return vma_remove(p, addr, length);
 }

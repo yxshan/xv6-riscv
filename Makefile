@@ -17,6 +17,7 @@ OBJS = \
   $K/main.o \
   $K/vm.o \
   $K/proc.o \
+  $K/vma.o \
   $K/swtch.o \
   $K/trampoline.o \
   $K/trap.o \

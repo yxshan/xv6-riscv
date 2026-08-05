@@ -1,5 +1,6 @@
 // 内核上下文切换时保存的寄存器集合。
 #include "signal.h"
+#include "vma.h"
 // ra 保存切换后的返回地址，sp 保存内核栈指针；
 // s0-s11 是 callee-saved 寄存器，调用者不负责保留它们，
 // 所以上下文切换必须显式保存和恢复。
@@ -128,5 +129,6 @@ struct proc {
   struct context context;      // 内核上下文，swtch() 保存/恢复
   struct file *ofile[NOFILE];  // 打开的文件描述符表
   struct inode *cwd;           // 当前工作目录
+  struct vma vmas[NVMA];       // mmap 虚拟内存区域
   char name[16];               // 进程名（用于调试输出）
 };

@@ -24,6 +24,7 @@ user/tests/
   proc_tests.c       # fork、wait、exec、进程状态
   module_tests.c     # FIFO、COW、stats、/proc 等内核模块功能
   perm_tests.c       # 文件权限、用户/组凭证与 exec 权限
+  mmap_tests.c       # mmap 私有映射与需求分页
 ```
 
 每个测试文件提供两个测试数组：
@@ -168,6 +169,14 @@ P2 批次一新增回归用例：
 - `perm_exec`：非 root 无执行位时 `exec` 失败，有执行位时成功。
 
 工具测试新增 `id`，用于确认 shell 进程的 root 凭证输出。
+
+P2 批次二新增回归用例：
+
+- `mmap_file_demand`：文件映射、偏移映射、私有写不落盘。
+- `mmap_anonymous`：匿名映射补零和 `munmap`。
+- `mmap_fork`：fork 复制映射及私有写隔离。
+- `mmap_badargs`：非法地址、长度、共享映射和设备 fd 被拒绝。
+- `mmap_after_unmap`：`munmap` 后继续访问映射地址会被杀死。
 
 内核自测：
 

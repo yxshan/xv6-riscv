@@ -168,6 +168,45 @@ usertests perm_exec
 make test-quick
 ```
 
+## P2 批次二：需求分页与 mmap
+
+状态：已完成
+
+完成内容：
+
+- 在 `struct proc` 上增加固定数组 VMA 表，支持文件映射和匿名映射。
+- 新增 `mmap` / `munmap` 系统调用，映射区域位于共享内存区域下方，
+  从高地址向下分配。
+- 缺页路径优先检查 VMA：文件映射按需调用 `readi()` 读取页面，
+  匿名映射补零页，再按 `prot` 建立页表权限。
+- fork 复制 VMA 描述符和已驻留页面，子进程保持私有副本语义。
+- exec/exit/munmap 时解除 VMA 映射、释放物理页和 inode 引用。
+- `copyinstr()` 也支持对惰性页面和 mmap 页面按需触发缺页。
+- 堆的上限调整为 `MMAP_BASE`，避免 sbrk 与 mmap 区域重叠。
+- 新增 `user/tests/mmap_tests.c`：文件/偏移映射、匿名映射、fork、
+  非法参数和 munmap 后访问杀死进程。
+
+涉及文件：
+
+- `kernel/vma.h`、`kernel/vma.c`
+- `kernel/proc.h`、`kernel/proc.c`
+- `kernel/vm.c`、`kernel/exec.c`
+- `kernel/sysfile.c`、`kernel/sysproc.c`
+- `kernel/memlayout.h`、`kernel/fcntl.h`
+- `user/tests/mmap_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests mmap_file_demand
+usertests mmap_anonymous
+usertests mmap_fork
+usertests mmap_badargs
+usertests mmap_after_unmap
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

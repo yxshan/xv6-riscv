@@ -152,6 +152,7 @@ found:
   p->gid = 0;
   p->egid = 0;
   p->umask = 022;
+  memset(p->vmas, 0, sizeof(p->vmas));
   p->sigpending = 0;
   p->sigactive = 0;
   memset(p->sighandlers, 0, sizeof(p->sighandlers));
@@ -186,6 +187,7 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  vma_clear(p);
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
@@ -275,7 +277,7 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
-    if(sz + n > SHM_BASE) {
+    if(sz + n > MMAP_BASE) {
       return -1;
     }
     if((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
@@ -305,6 +307,11 @@ kfork(void)
 
   // 复制父进程的用户内存（当前是完整复制物理页）。
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  if(vma_copy(np, p) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -389,6 +396,8 @@ kexit(int status)
   iput(p->cwd);
   end_op();
   p->cwd = 0;
+
+  vma_clear(p);
 
   acquire(&wait_lock);
 
