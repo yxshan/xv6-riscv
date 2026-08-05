@@ -149,11 +149,11 @@ $U/_%: $U/modules/%.o $(ULIB) $U/user.ld
 
 $(DYNMOD_BIN): $(DYNMOD_SRC) $K/module/dynmod.ld
 	$(CC) $(CFLAGS) -fno-pic -c -o $(DYNMOD_OBJ) $(DYNMOD_SRC)
-	$(LD) -T $K/module/dynmod.ld -o $@ $(DYNMOD_OBJ)
+	$(LD) -q -T $K/module/dynmod.ld -o $@ $(DYNMOD_OBJ)
 
 $(DYNMOD2_BIN): $(DYNMOD2_SRC) $K/module/dynmod.ld
 	$(CC) $(CFLAGS) -fno-pic -c -o $(DYNMOD2_OBJ) $(DYNMOD2_SRC)
-	$(LD) -T $K/module/dynmod.ld -o $@ $(DYNMOD2_OBJ)
+	$(LD) -q -T $K/module/dynmod.ld -o $@ $(DYNMOD2_OBJ)
 
 $U/usys.S : $U/usys.pl
 	perl $U/usys.pl > $U/usys.S

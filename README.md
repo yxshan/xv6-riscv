@@ -221,8 +221,8 @@ KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
 动态模块被链接到固定地址 `DYNMOD_BASE`，通过 `struct kmod_api *` 访问内核
 功能，由 `modload` 加载、`modunload` 卸载。
 
-当前动态模块支持多个槽位的固定地址 ELF 加载，
-暂不支持 ELF 重定位和内核符号解析。
+当前动态模块支持多个槽位的固定地址 ELF 加载，并支持基础 ELF 重定位；
+仍不解析内核符号。
 
 ## 文档
 

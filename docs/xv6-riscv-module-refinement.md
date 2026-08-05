@@ -380,6 +380,43 @@ rm /disk1/newfile
 make test-quick
 ```
 
+## 完善批次四：动态模块 ELF 重定位
+
+状态：已完成
+
+完成内容：
+
+- ELF 头新增 section header、symbol、RELA 结构。
+- 动态模块链接时使用 `-q` 保留重定位信息。
+- 加载器支持 `R_RISCV_64`、`R_RISCV_32`、`R_RISCV_RELATIVE`。
+- PC-relative、RVC 分支和 RELAX 重定位在整块搬移后仍然有效，直接跳过。
+- 动态模块槽位扩到 32KB，`modload` 与测试上限同步扩大。
+- `dynmod2` 增加初始化数据指针，用于验证搬移到槽位 1 后重定位正确。
+- `test-xv6.py modules` 增加 `modcli 5 2` 检查。
+
+涉及文件：
+
+- `kernel/elf.h`
+- `kernel/memlayout.h`
+- `kernel/module/module.c`
+- `kernel/modules/dynmod_two.c`
+- `Makefile`
+- `user/modload.c`
+- `user/tests/module_tests.c`
+- `test-xv6.py`
+
+验证命令：
+
+```bash
+make TOOLPREFIX=riscv64-elf- kernel/kernel dynmod dynmod2 fs.img
+usertests dynmod_multi
+modload dynmod
+modload dynmod2
+modcli 5 2
+modunload 0
+modunload 1
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

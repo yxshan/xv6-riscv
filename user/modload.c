@@ -8,7 +8,7 @@
 #include "kernel/fcntl.h"
 #include "user/user.h"
 
-#define MODLOAD_MAX 16384
+#define MODLOAD_MAX 32768
 
 static void
 usage(void)

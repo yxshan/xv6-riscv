@@ -227,6 +227,96 @@ dyn_remove_slot_locked(int slot)
 }
 
 static int
+module_apply_relocs(uint64 src, int len, struct elfhdr *eh, uint64 base)
+{
+  struct shdr sh;
+  struct sym sym;
+  struct rela rela;
+  uint64 symoff = 0, symsize = 0, symentsize = 0;
+  uint64 shoff = eh->shoff;
+
+  if(shoff == 0 || eh->shnum == 0 || eh->shentsize < sizeof(sh))
+    return 0;
+  if(shoff + (uint64)eh->shnum * eh->shentsize > (uint64)len)
+    return -1;
+
+  for(int i = 0; i < eh->shnum; i++){
+    uint64 off = shoff + (uint64)i * eh->shentsize;
+    if(copyin(myproc()->pagetable, (char*)&sh, src + off, sizeof(sh)) < 0)
+      return -1;
+    if(sh.sh_type == SHT_SYMTAB){
+      symoff = sh.sh_offset;
+      symsize = sh.sh_size;
+      symentsize = sh.sh_entsize;
+    }
+  }
+  if(symentsize == 0)
+    return 0;
+
+  for(int i = 0; i < eh->shnum; i++){
+    uint64 off = shoff + (uint64)i * eh->shentsize;
+    if(copyin(myproc()->pagetable, (char*)&sh, src + off, sizeof(sh)) < 0)
+      return -1;
+    if(sh.sh_type != SHT_RELA || sh.sh_entsize == 0)
+      continue;
+    if(sh.sh_offset + sh.sh_size > (uint64)len)
+      return -1;
+
+    for(uint64 roff = 0; roff + sh.sh_entsize <= sh.sh_size;
+        roff += sh.sh_entsize){
+      uint64 rtype, rsym, addr, sval = 0;
+
+      if(copyin(myproc()->pagetable, (char*)&rela,
+                src + sh.sh_offset + roff, sizeof(rela)) < 0)
+        return -1;
+      rtype = rela.r_info & 0xffffffffUL;
+      rsym = rela.r_info >> 32;
+      if(rela.r_offset < DYNMOD_BASE ||
+         rela.r_offset >= DYNMOD_BASE + DYNMOD_SIZE)
+        continue;
+      addr = base + (rela.r_offset - DYNMOD_BASE);
+
+      if(rtype == R_RISCV_RELATIVE){
+        sval = base;
+      } else if(rtype == R_RISCV_64 || rtype == R_RISCV_32){
+        if(rsym == 0){
+          sval = 0;
+        } else {
+          uint64 symoff_cur = symoff + rsym * symentsize;
+          if(symoff_cur + symentsize > symoff + symsize)
+            return -1;
+          if(copyin(myproc()->pagetable, (char*)&sym,
+                    src + symoff_cur, sizeof(sym)) < 0)
+            return -1;
+          if(sym.st_shndx != 0){
+            if(sym.st_value < DYNMOD_BASE ||
+               sym.st_value >= DYNMOD_BASE + DYNMOD_SIZE)
+              return -1;
+            sval = base + (sym.st_value - DYNMOD_BASE);
+          }
+        }
+      } else {
+        // 其余类型为 PC-relative、RVC 分支或 RELAX；
+        // 整个模块线性搬移后这些相对偏移仍然有效，无需修改。
+        continue;
+      }
+
+      uint64 val = sval + (uint64)rela.r_addend;
+      if(rtype == R_RISCV_64 || rtype == R_RISCV_RELATIVE){
+        if(addr + 8 > base + DYNMOD_SIZE)
+          return -1;
+        *(uint64*)addr = val;
+      } else if(rtype == R_RISCV_32){
+        if(addr + 4 > base + DYNMOD_SIZE)
+          return -1;
+        *(uint32*)addr = (uint32)val;
+      }
+    }
+  }
+  return 0;
+}
+
+static int
 module_load_elf(uint64 src, int len, uint64 base)
 {
   struct elfhdr eh;
@@ -273,6 +363,9 @@ module_load_elf(uint64 src, int len, uint64 base)
       memset((void*)(base + (ph.vaddr - DYNMOD_BASE) + ph.filesz), 0,
              ph.memsz - ph.filesz);
   }
+
+  if(module_apply_relocs(src, len, &eh, base) < 0)
+    return -1;
 
   entry = base + (eh.entry - DYNMOD_BASE);
   api.printf = printf;

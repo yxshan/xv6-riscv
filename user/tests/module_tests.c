@@ -303,7 +303,7 @@ dynmod_lifecycle(char *s)
     printf("%s: open dynmod failed\n", s);
     exit(1);
   }
-  if(st.size <= 0 || st.size > 16384){
+  if(st.size <= 0 || st.size > 32768){
     printf("%s: bad dynmod size\n", s);
     exit(1);
   }
@@ -386,7 +386,8 @@ dynmod_multi(char *s)
   free(buf);
 
   if(module_call(KMOD_DYN_SAMPLE, 1, 0, 0) != 0x1234 ||
-     module_call(KMOD_DYN_TWO, 1, 0, 0) != 0xABCD){
+     module_call(KMOD_DYN_TWO, 1, 0, 0) != 0xABCD ||
+     module_call(KMOD_DYN_TWO, 2, 0, 0) != (uint64)'d'){
     printf("%s: multi module call failed\n", s);
     exit(1);
   }

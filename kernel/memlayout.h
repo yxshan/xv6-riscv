@@ -42,7 +42,7 @@
 // 动态模块固定加载区域，位于内核 BSS 之后。
 // 该区域从物理页分配器中保留，避免与普通内核内存冲突。
 #define DYNMOD_BASE 0x80040000L
-#define DYNMOD_SIZE (4*4096)
+#define DYNMOD_SIZE (8*4096)
 #define DYNMOD_NUM 4
 #define DYNMOD_AREA_SIZE (DYNMOD_SIZE * DYNMOD_NUM)
 

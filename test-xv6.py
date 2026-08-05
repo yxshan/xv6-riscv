@@ -321,6 +321,8 @@ def test_modules():
     q.monitor("^module_load = 1", timeout=60)
     q.cmd("modcli 5 1\n")
     q.monitor("^module_call\\(5, 1\\) = 43981", timeout=60)
+    q.cmd("modcli 5 2\n")
+    q.monitor("^module_call\\(5, 2\\) = 100", timeout=60)
     q.cmd("modunload 0\n")
     q.monitor("^dynmod unloaded", timeout=60)
     q.monitor("^module_unload = 0", timeout=60)

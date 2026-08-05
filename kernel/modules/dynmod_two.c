@@ -4,6 +4,7 @@
 #include "module_ids.h"
 
 static int (*gprintf2)(char *fmt, ...);
+static const char *gname = "dynmod2";
 
 static void
 dyn_two_exit(void)
@@ -20,6 +21,8 @@ dyn_two_handler(int cmd, kmod_u64 arg0, kmod_u64 arg1)
 
   if(cmd == 1)
     return 0xABCD;
+  if(cmd == 2)
+    return (kmod_u64)gname[0];
   return -1;
 }
 
