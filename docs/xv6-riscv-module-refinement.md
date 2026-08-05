@@ -275,6 +275,39 @@ echo x > /disk1/readonly
 make test-quick
 ```
 
+## 完善批次一：mmap 语义补全
+
+状态：已完成
+
+完成内容：
+
+- 支持 `MAP_SHARED` 文件映射与匿名共享映射。
+- 共享页使用 `PTE_SHM|PTE_COW` 作为引用计数标记，`munmap`/退出时安全释放。
+- `munmap` 支持页对齐的部分解除，VMA 可拆分为左右两段。
+- 共享文件映射在 `munmap` 和进程清理时把已驻留可写页写回文件。
+- fork 时私有映射复制页面，共享映射继续映射同一物理页。
+- 新增测试：共享文件写回、共享匿名 fork、部分 `munmap`、部分共享写回。
+- `test-xv6.py` 改为直接启动 QEMU，并注册退出清理，避免残留 QEMU 占满进程表。
+
+涉及文件：
+
+- `kernel/vma.c`、`kernel/vm.c`
+- `kernel/modules/cow.c`
+- `kernel/sysfile.c`
+- `test-xv6.py`
+- `user/tests/mmap_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests mmap_shared_file
+usertests mmap_shared_fork
+usertests mmap_munmap_partial
+usertests mmap_shared_partial
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

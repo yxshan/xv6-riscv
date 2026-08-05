@@ -740,7 +740,7 @@ sys_pipe(void)
   return 0;
 }
 
-// mmap：创建私有文件映射或匿名映射，地址由内核在 mmap 区域分配。
+// mmap：创建文件或匿名映射，地址由内核在 mmap 区域分配。
 uint64
 sys_mmap(void)
 {
@@ -760,7 +760,9 @@ sys_mmap(void)
 
   if(addr != 0 || length == 0 || length > MMAP_SIZE || off < 0)
     return -1;
-  if((flags & MAP_PRIVATE) == 0 || (flags & MAP_FIXED))
+  if((flags & (MAP_PRIVATE|MAP_SHARED)) == 0 ||
+     (flags & (MAP_PRIVATE|MAP_SHARED)) == (MAP_PRIVATE|MAP_SHARED) ||
+     (flags & MAP_FIXED))
     return -1;
 
   if(fd < 0){
@@ -771,6 +773,8 @@ sys_mmap(void)
        f->type != FD_INODE)
       return -1;
     if((prot & PROT_READ) && !f->readable)
+      return -1;
+    if((flags & MAP_SHARED) && (prot & PROT_WRITE) && !f->writable)
       return -1;
 
     ip = idup(f->ip);

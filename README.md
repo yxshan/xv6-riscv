@@ -30,7 +30,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - shell `&&` 短路执行
 - 命名管道 FIFO：`mkfifo`
 - 文件权限与用户/组：`chmod` / `chown` / `setuid` / `setgid` / `umask`
-- 需求分页与 `mmap`：文件/匿名私有映射，缺页时按需加载
+- 需求分页与 `mmap`：支持 `MAP_PRIVATE` / `MAP_SHARED`、部分 `munmap` 与共享写回
 - 多磁盘支持：第二块 virtio 磁盘以 `/disk1` 只读挂载
 
 ## 目录结构

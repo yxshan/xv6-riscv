@@ -68,7 +68,8 @@ cow_handle(pagetable_t pagetable, uint64 va)
   if(va >= MAXVA)
     return -1;
   pte = walk(pagetable, va, 0);
-  if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_COW) == 0)
+  if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_COW) == 0 ||
+     (*pte & PTE_SHM) != 0)
     return -1;
 
   pa = PTE2PA(*pte);

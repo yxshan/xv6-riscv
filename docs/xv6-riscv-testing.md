@@ -177,6 +177,10 @@ P2 批次二新增回归用例：
 - `mmap_fork`：fork 复制映射及私有写隔离。
 - `mmap_badargs`：非法地址、长度、共享映射和设备 fd 被拒绝。
 - `mmap_after_unmap`：`munmap` 后继续访问映射地址会被杀死。
+- `mmap_shared_file`：共享映射写回文件。
+- `mmap_shared_fork`：fork 后共享匿名页保持同一物理页。
+- `mmap_munmap_partial`：部分 `munmap` 后两侧仍可访问，中间访问被杀。
+- `mmap_shared_partial`：部分解除共享映射时只写回被解除的页。
 
 P2 批次三新增回归用例：
 

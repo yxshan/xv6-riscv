@@ -81,33 +81,94 @@ vma_add(struct proc *p, uint64 start, uint64 end, int prot, int flags,
   return 0;
 }
 
-// 解除一个完整 VMA 映射，释放已分配的物理页和 inode 引用。
+// 把共享映射中已驻留的可写页写回文件。
+static void
+vma_writeback_range(struct proc *p, struct vma *v, uint64 start, uint64 end)
+{
+  if((v->flags & MAP_SHARED) == 0 || v->ip == 0)
+    return;
+  if(start < v->start)
+    start = v->start;
+  if(end > v->end)
+    end = v->end;
+  if(start >= end)
+    return;
+
+  begin_op();
+  for(uint64 va = start; va < end; va += PGSIZE){
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_W) == 0)
+      continue;
+
+    uint64 off = v->off + (va - v->start);
+    ilock(v->ip);
+    if(off < v->ip->size){
+      uint64 n = v->ip->size - off;
+      if(n > PGSIZE)
+        n = PGSIZE;
+      writei(v->ip, 0, PTE2PA(*pte), off, n);
+    }
+    iunlock(v->ip);
+  }
+  end_op();
+}
+
+// 解除 VMA 中的一段映射，支持页对齐的部分 munmap。
 int
 vma_remove(struct proc *p, uint64 addr, uint64 length)
 {
-  struct vma *v;
-  uint64 end;
+  struct vma *v, *right = 0;
+  uint64 end, oldstart;
 
   if(addr % PGSIZE != 0 || length == 0 || addr >= MAXVA ||
      length > MAXVA - addr)
     return -1;
   end = PGROUNDUP(addr + length);
   v = vma_find(p, addr);
-  if(v == 0 || v->start != addr || v->end != end)
+  if(v == 0 || addr < v->start || end > v->end)
     return -1;
 
-  uvmunmap(p->pagetable, addr, (end - addr) / PGSIZE, 1);
-  if(v->ip){
-    begin_op();
-    iput(v->ip);
-    end_op();
+  // 中间切除时需要保留右侧部分，先申请 VMA 槽位。
+  if(addr > v->start && end < v->end){
+    for(int i = 0; i < NVMA; i++){
+      if(!p->vmas[i].used){
+        right = &p->vmas[i];
+        break;
+      }
+    }
+    if(right == 0)
+      return -1;
+    *right = *v;
+    right->start = end;
+    right->off = v->off + (end - v->start);
+    if(v->ip)
+      right->ip = idup(v->ip);
   }
-  v->used = 0;
-  v->ip = 0;
+
+  vma_writeback_range(p, v, addr, end);
+  uvmunmap(p->pagetable, addr, (end - addr) / PGSIZE, 1);
+
+  oldstart = v->start;
+  if(addr == oldstart && end == v->end){
+    if(v->ip){
+      begin_op();
+      iput(v->ip);
+      end_op();
+    }
+    v->used = 0;
+    v->ip = 0;
+  } else if(addr == oldstart){
+    v->start = end;
+    v->off += end - oldstart;
+  } else if(end == v->end){
+    v->end = addr;
+  } else {
+    v->end = addr;
+  }
   return 0;
 }
 
-// 清除进程所有 VMA：先解除映射，再释放 inode 引用。
+// 清除进程所有 VMA：先写回共享页，再解除映射并释放 inode 引用。
 void
 vma_clear(struct proc *p)
 {
@@ -115,6 +176,7 @@ vma_clear(struct proc *p)
     struct vma *v = &p->vmas[i];
     if(!v->used)
       continue;
+    vma_writeback_range(p, v, v->start, v->end);
     if(p->pagetable)
       uvmunmap(p->pagetable, v->start, (v->end - v->start) / PGSIZE, 1);
     if(v->ip){
@@ -127,7 +189,7 @@ vma_clear(struct proc *p)
   }
 }
 
-// fork 时复制 VMA 描述符，并把父进程中已驻留的页面复制给子进程。
+// fork 时复制 VMA 描述符；私有页复制，共享页映射同一物理页。
 int
 vma_copy(struct proc *np, struct proc *p)
 {
@@ -144,19 +206,31 @@ vma_copy(struct proc *np, struct proc *p)
     for(uint64 va = v->start; va < v->end; va += PGSIZE){
       pte_t *pte = walk(p->pagetable, va, 0);
       char *mem;
+      uint64 pa;
+      int perm = PTE_R | PTE_U;
 
       if(pte == 0 || (*pte & PTE_V) == 0)
         continue;
-      mem = kalloc();
-      if(mem == 0)
-        goto err;
-      memmove(mem, (char*)PTE2PA(*pte), PGSIZE);
-
-      int perm = PTE_R | PTE_U;
+      pa = PTE2PA(*pte);
       if(v->prot & PROT_WRITE)
         perm |= PTE_W;
       if(v->prot & PROT_EXEC)
         perm |= PTE_X;
+
+      if(v->flags & MAP_SHARED){
+        cow_add(pa);
+        if(mappages(np->pagetable, va, PGSIZE, pa,
+                    perm | PTE_SHM | PTE_COW) != 0){
+          cow_release(pa);
+          goto err;
+        }
+        continue;
+      }
+
+      mem = kalloc();
+      if(mem == 0)
+        goto err;
+      memmove(mem, (char*)pa, PGSIZE);
       if(mappages(np->pagetable, va, PGSIZE, (uint64)mem, perm) != 0){
         kfree(mem);
         goto err;
@@ -208,9 +282,13 @@ vma_fault(struct proc *p, uint64 va)
     perm |= PTE_W;
   if(v->prot & PROT_EXEC)
     perm |= PTE_X;
+  if(v->flags & MAP_SHARED)
+    perm |= PTE_SHM | PTE_COW;
   if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm) != 0){
     kfree(mem);
     return 0;
   }
+  if(v->flags & MAP_SHARED)
+    cow_add((uint64)mem);
   return (uint64)mem;
 }

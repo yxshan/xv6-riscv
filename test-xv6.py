@@ -9,6 +9,7 @@
 # ./test-xv6.py log (runs the log crash test)
 
 import argparse, os, inspect, re, signal, subprocess, sys, time
+import atexit
 from subprocess import run
 
 parser = argparse.ArgumentParser()
@@ -16,25 +17,51 @@ parser.add_argument('testrex', help="test name or regular expression")
 parser.add_argument("-q", action='store_true', help="usertests quick")
 args = parser.parse_args()
 
+_active_qemus = []
+
+def _kill_active_qemus():
+    for q in _active_qemus:
+        if q.proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(q.proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+atexit.register(_kill_active_qemus)
+
 class QEMU(object):
 
     def __init__(self, reset=False):
         if reset:
             self.build_xv6()
             self.reset_fs()
-        q = ["make", "qemu"]
+        else:
+            run(["make", "kernel/kernel", "fs.img", "fs2.img"], check=True)
+        q = ["qemu-system-riscv64",
+             "-machine", "virt",
+             "-bios", "none",
+             "-kernel", "kernel/kernel",
+             "-m", "128M",
+             "-smp", os.environ.get("CPUS", "3"),
+             "-nographic",
+             "-global", "virtio-mmio.force-legacy=false",
+             "-drive", "file=fs.img,if=none,format=raw,id=x0",
+             "-device", "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
+             "-drive", "file=fs2.img,if=none,format=raw,id=x1",
+             "-device", "virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1"]
         self.proc = subprocess.Popen(q, stdin=subprocess.PIPE,
                                       stdout=subprocess.PIPE,
                                       stderr=subprocess.STDOUT,
                                       start_new_session=True)
+        _active_qemus.append(self)
         self.output = ""
         self.outbytes = bytearray()       
         time.sleep(1)
 
     def reset_fs(self):
         try:
-            run(["rm", "fs.img"], check=True)
-            run(["make", "fs.img"], check=True)
+            run(["rm", "-f", "fs.img", "fs2.img"], check=True)
+            run(["make", "fs.img", "fs2.img"], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Command failed with exit code {e.returncode}")
 
@@ -71,8 +98,13 @@ class QEMU(object):
 
     def stop(self):
         if self.proc.poll() is None:
-            os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
+            try:
+                os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             self.proc.wait()
+        if self in _active_qemus:
+            _active_qemus.remove(self)
 
     def read(self):
         buf = os.read(self.proc.stdout.fileno(), 4096)

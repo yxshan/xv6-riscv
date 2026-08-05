@@ -211,12 +211,17 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       continue;   
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
       continue;
-    if(do_free && (*pte & PTE_SHM) == 0){
+    if(do_free){
       uint64 pa = PTE2PA(*pte);
-      if(*pte & PTE_COW)
+      if(*pte & PTE_SHM){
+        // 共享内存页由 shm 或共享 mmap 引用计数管理。
+        if(*pte & PTE_COW)
+          cow_release(pa);
+      } else if(*pte & PTE_COW){
         cow_release(pa);
-      else
+      } else {
         kfree((void*)pa);
+      }
     }
     *pte = 0;
   }
