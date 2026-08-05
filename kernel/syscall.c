@@ -122,6 +122,15 @@ extern uint64 sys_shmrm(void);
 extern uint64 sys_signal(void);
 extern uint64 sys_sigkill(void);
 extern uint64 sys_sigreturn(void);
+extern uint64 sys_chmod(void);
+extern uint64 sys_chown(void);
+extern uint64 sys_getuid(void);
+extern uint64 sys_geteuid(void);
+extern uint64 sys_getgid(void);
+extern uint64 sys_getegid(void);
+extern uint64 sys_setuid(void);
+extern uint64 sys_setgid(void);
+extern uint64 sys_umask(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -161,6 +170,15 @@ static uint64 (*syscalls[])(void) = {
 [SYS_signal] sys_signal,
 [SYS_sigkill] sys_sigkill,
 [SYS_sigreturn] sys_sigreturn,
+[SYS_chmod] sys_chmod,
+[SYS_chown] sys_chown,
+[SYS_getuid] sys_getuid,
+[SYS_geteuid] sys_geteuid,
+[SYS_getgid] sys_getgid,
+[SYS_getegid] sys_getegid,
+[SYS_setuid] sys_setuid,
+[SYS_setgid] sys_setgid,
+[SYS_umask] sys_umask,
 };
 
 void

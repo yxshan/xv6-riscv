@@ -23,6 +23,7 @@ user/tests/
   fs_tests.c         # 文件、目录、日志、inode
   proc_tests.c       # fork、wait、exec、进程状态
   module_tests.c     # FIFO、COW、stats、/proc 等内核模块功能
+  perm_tests.c       # 文件权限、用户/组凭证与 exec 权限
 ```
 
 每个测试文件提供两个测试数组：
@@ -156,6 +157,17 @@ CI 使用 `cpus: [1, 3]` 矩阵，并在失败时上传 `test-xv6.out`。
 - `signal_default`：`SIG_DFL` 默认终止进程。
 - `dynmod_lifecycle`：动态模块加载后能执行卸载回调。
 - `prio_boost`：周期性提升后按优先级保持目标队列（慢测试）。
+
+P2 批次一新增回归用例：
+
+- `perm_credentials`：uid/gid/euid/egid 读取、`setuid`/`setgid` 与 `umask`。
+- `perm_basic`：默认权限、`chmod`、非 root 的读写拒绝与 root 绕过。
+- `perm_classes`：owner/group/other 三类权限匹配。
+- `perm_dir`：目录执行权限影响路径解析与目录内创建。
+- `perm_create_existing`：`O_CREATE` 打开已存在文件不要求父目录写权限。
+- `perm_exec`：非 root 无执行位时 `exec` 失败，有执行位时成功。
+
+工具测试新增 `id`，用于确认 shell 进程的 root 凭证输出。
 
 内核自测：
 

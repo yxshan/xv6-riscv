@@ -36,3 +36,12 @@
 #define SYS_signal 33
 #define SYS_sigkill 34
 #define SYS_sigreturn 35
+#define SYS_chmod 36
+#define SYS_chown 37
+#define SYS_getuid 38
+#define SYS_geteuid 39
+#define SYS_getgid 40
+#define SYS_getegid 41
+#define SYS_setuid 42
+#define SYS_setgid 43
+#define SYS_umask 44

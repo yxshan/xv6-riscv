@@ -40,6 +40,15 @@
   X(SYS_shmrm, shmrm) \
   X(SYS_signal, signal) \
   X(SYS_sigkill, sigkill) \
-  X(SYS_sigreturn, sigreturn)
+  X(SYS_sigreturn, sigreturn) \
+  X(SYS_chmod, chmod) \
+  X(SYS_chown, chown) \
+  X(SYS_getuid, getuid) \
+  X(SYS_geteuid, geteuid) \
+  X(SYS_getgid, getgid) \
+  X(SYS_getegid, getegid) \
+  X(SYS_setuid, setuid) \
+  X(SYS_setgid, setgid) \
+  X(SYS_umask, umask)
 
 #endif

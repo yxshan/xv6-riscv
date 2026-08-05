@@ -6,6 +6,7 @@
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
+#include "stat.h"
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
@@ -25,6 +26,81 @@ sys_getpid(void)
 {
   // 直接从当前进程控制块读取 pid。
   return myproc()->pid;
+}
+
+uint64
+sys_getuid(void)
+{
+  return myproc()->uid;
+}
+
+uint64
+sys_geteuid(void)
+{
+  return myproc()->euid;
+}
+
+uint64
+sys_getgid(void)
+{
+  return myproc()->gid;
+}
+
+uint64
+sys_getegid(void)
+{
+  return myproc()->egid;
+}
+
+uint64
+sys_setuid(void)
+{
+  int uid;
+  struct proc *p = myproc();
+
+  argint(0, &uid);
+  if(uid < 0 || uid > 65535)
+    return -1;
+  if(p->euid != 0 && uid != p->uid && uid != p->euid)
+    return -1;
+  if(p->euid == 0)
+    p->uid = p->euid = uid;
+  else
+    p->euid = uid;
+  return 0;
+}
+
+uint64
+sys_setgid(void)
+{
+  int gid;
+  struct proc *p = myproc();
+
+  argint(0, &gid);
+  if(gid < 0 || gid > 65535)
+    return -1;
+  if(p->euid != 0 && gid != p->gid && gid != p->egid)
+    return -1;
+  if(p->euid == 0)
+    p->gid = p->egid = gid;
+  else
+    p->egid = gid;
+  return 0;
+}
+
+uint64
+sys_umask(void)
+{
+  int mask;
+  uint old;
+  struct proc *p = myproc();
+
+  argint(0, &mask);
+  if(mask < 0 || mask > PERM_MASK)
+    return -1;
+  old = p->umask;
+  p->umask = mask;
+  return old;
 }
 
 uint64

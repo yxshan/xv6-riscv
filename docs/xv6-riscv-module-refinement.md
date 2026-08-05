@@ -126,6 +126,48 @@ usertests prio_boost
 usertests -q
 ```
 
+## P2 批次一：文件权限与用户/组
+
+状态：已完成
+
+完成内容：
+
+- 磁盘 inode 增加 `mode`、`uid`、`gid` 字段，并用填充保持
+  `sizeof(struct dinode) == 128`，使每个块仍可整除。
+- `struct stat` 同步返回权限与所有者信息。
+- `struct proc` 增加 `uid/euid/gid/egid/umask`，fork 时继承。
+- 新增 `iaccess()` 权限检查：owner/group/other 三类权限位，
+  root 按教学简化直接绕过读/写/执行检查。
+- 检查点覆盖：`open` 读写、`exec` 执行、`chdir` 执行、
+  路径遍历搜索、创建/删除/硬链接时的父目录写权限。
+- 新增系统调用：`chmod`、`chown`、`getuid`、`geteuid`、
+  `getgid`、`getegid`、`setuid`、`setgid`、`umask`。
+- 新增用户工具：`id`、`chmod`、`chown`，以及测试用可执行文件
+  `permexec`。
+- 新增 `user/tests/perm_tests.c` 权限与凭证测试套件。
+
+涉及文件：
+
+- `kernel/fs.h`、`kernel/fs.c`、`kernel/file.h`、`kernel/stat.h`
+- `kernel/proc.h`、`kernel/proc.c`
+- `kernel/sysfile.c`、`kernel/sysproc.c`、`kernel/exec.c`
+- `mkfs/mkfs.c`
+- `user/id.c`、`user/chmod.c`、`user/chown.c`、`user/permexec.c`
+- `user/tests/perm_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests user/_id user/_chmod user/_chown user/_permexec fs.img
+usertests perm_credentials
+usertests perm_basic
+usertests perm_classes
+usertests perm_dir
+usertests perm_create_existing
+usertests perm_exec
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

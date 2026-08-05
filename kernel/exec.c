@@ -9,9 +9,13 @@
 #include "memlayout.h"
 #include "riscv.h"
 #include "spinlock.h"
+#include "sleeplock.h"
 #include "proc.h"
 #include "defs.h"
 #include "elf.h"
+#include "stat.h"
+#include "fs.h"
+#include "file.h"
 
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
@@ -49,6 +53,9 @@ kexec(char *path, char **argv)
     return -1;
   }
   ilock(ip);
+
+  if(ip->type != T_FILE || iaccess(ip, 1) < 0)
+    goto bad;
 
   // 读取 ELF 头，并验证魔数，确认是可执行文件。
   if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))

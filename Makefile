@@ -203,6 +203,10 @@ UPROGS=\
 	$U/_cowtest\
 	$U/_signaltest\
 	$U/_ps\
+	$U/_id\
+	$U/_chmod\
+	$U/_chown\
+	$U/_permexec\
 	$(UMOD_BINS)\
 
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN)

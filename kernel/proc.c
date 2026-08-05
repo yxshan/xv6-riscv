@@ -147,6 +147,11 @@ found:
   p->priority = 50;
   p->qlevel = 0;
   p->qticks = 0;
+  p->uid = 0;
+  p->euid = 0;
+  p->gid = 0;
+  p->egid = 0;
+  p->umask = 022;
   p->sigpending = 0;
   p->sigactive = 0;
   memset(p->sighandlers, 0, sizeof(p->sighandlers));
@@ -322,6 +327,11 @@ kfork(void)
   np->priority = p->priority;
   np->qlevel = p->qlevel;
   np->qticks = 0;
+  np->uid = p->uid;
+  np->euid = p->euid;
+  np->gid = p->gid;
+  np->egid = p->egid;
+  np->umask = p->umask;
 
   pid = np->pid;
 

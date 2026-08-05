@@ -244,7 +244,9 @@ def test_tools():
     q.cmd("mkfifo fifo\ncat fifo &\necho hello > fifo\n")
     q.monitor(".*hello", timeout=60)
     q.cmd("ps\n")
-    q.monitor("^processes ", timeout=60)
+    q.monitor("^pid .* ps", timeout=60)
+    q.cmd("id\n")
+    q.monitor("^\\$ uid=0 gid=0 euid=0 egid=0|^uid=0 gid=0 euid=0 egid=0", timeout=60)
     q.stop()
     print("OK")
 

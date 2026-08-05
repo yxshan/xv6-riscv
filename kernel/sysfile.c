@@ -16,7 +16,7 @@
 #include "file.h"
 #include "fcntl.h"
 
-static struct inode* create(char *path, short type, short major, short minor);
+static struct inode* create(char *path, short type, short major, short minor, ushort mode);
 
 // 取出第 n 个参数作为文件描述符，并返回对应的 struct file。
 // 校验描述符是否在范围内、进程是否真的打开了该文件。
@@ -123,6 +123,85 @@ sys_fstat(void)
   return filestat(f, st);
 }
 
+// 修改文件权限位。只有文件所有者或 root 可以执行。
+uint64
+sys_chmod(void)
+{
+  char path[MAXPATH];
+  int mode;
+  struct inode *ip;
+  struct proc *p = myproc();
+
+  if(argstr(0, path, MAXPATH) < 0)
+    return -1;
+  argint(1, &mode);
+  if(mode < 0 || mode > PERM_MASK)
+    return -1;
+
+  begin_op();
+  if((ip = namei(path)) == 0){
+    end_op();
+    return -1;
+  }
+  ilock(ip);
+  if(p->euid != 0 && p->euid != ip->uid){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  ip->mode = mode & PERM_MASK;
+  iupdate(ip);
+  iunlockput(ip);
+  end_op();
+  return 0;
+}
+
+// 修改文件所有者/所属组。uid/gid 为 -1 时保持原值。
+uint64
+sys_chown(void)
+{
+  char path[MAXPATH];
+  int uid, gid;
+  struct inode *ip;
+  struct proc *p = myproc();
+
+  if(argstr(0, path, MAXPATH) < 0)
+    return -1;
+  argint(1, &uid);
+  argint(2, &gid);
+  if((uid < -1 || uid > 65535) || (gid < -1 || gid > 65535))
+    return -1;
+
+  begin_op();
+  if((ip = namei(path)) == 0){
+    end_op();
+    return -1;
+  }
+  ilock(ip);
+  if(p->euid != 0 && p->euid != ip->uid)
+    goto bad;
+  // 非 root 只能修改所属组为自己当前有效组，不能修改文件所有者。
+  if(p->euid != 0){
+    if(uid != -1 && uid != ip->uid)
+      goto bad;
+    if(gid != -1 && gid != p->egid)
+      goto bad;
+  }
+  if(uid != -1)
+    ip->uid = uid;
+  if(gid != -1)
+    ip->gid = gid;
+  iupdate(ip);
+  iunlockput(ip);
+  end_op();
+  return 0;
+
+bad:
+  iunlockput(ip);
+  end_op();
+  return -1;
+}
+
 // 创建硬链接：让 new 指向 old 的同一个 inode，并递增 nlink。
 uint64
 sys_link(void)
@@ -153,7 +232,8 @@ sys_link(void)
   if((dp = nameiparent(new, name)) == 0)
     goto bad;
   ilock(dp);
-  if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){
+  if(iaccess(dp, 2) < 0 || dp->dev != ip->dev ||
+     dirlink(dp, name, ip->inum) < 0){
     iunlockput(dp);
     goto bad;
   }
@@ -185,7 +265,7 @@ sys_symlink(void)
     return -1;
 
   begin_op();
-  if((ip = create(path, T_SYMLINK, 0, 0)) == 0){
+  if((ip = create(path, T_SYMLINK, 0, 0, 0)) == 0){
     end_op();
     return -1;
   }
@@ -237,6 +317,9 @@ sys_unlink(void)
 
   ilock(dp);
 
+  if(iaccess(dp, 2) < 0)
+    goto bad;
+
   // 不允许删除 "." 和 ".."。
   if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0)
     goto bad;
@@ -276,7 +359,7 @@ bad:
 }
 
 static struct inode*
-create(char *path, short type, short major, short minor)
+create(char *path, short type, short major, short minor, ushort mode)
 {
   struct inode *ip, *dp;
   char name[DIRSIZ];
@@ -296,6 +379,13 @@ create(char *path, short type, short major, short minor)
     return 0;
   }
 
+  // 只有真正新建目录项时才要求父目录写权限；
+  // O_CREATE 打开已存在文件不应受父目录权限影响。
+  if(iaccess(dp, 2) < 0){
+    iunlockput(dp);
+    return 0;
+  }
+
   if((ip = ialloc(dp->dev, type)) == 0){
     iunlockput(dp);
     return 0;
@@ -304,6 +394,15 @@ create(char *path, short type, short major, short minor)
   ilock(ip);
   ip->major = major;
   ip->minor = minor;
+  if(mode == 0){
+    ushort base = (type == T_DIR) ? 0777 : 0666;
+    mode = (base & ~myproc()->umask) & PERM_MASK;
+  } else {
+    mode &= PERM_MASK;
+  }
+  ip->mode = mode;
+  ip->uid = myproc()->euid;
+  ip->gid = myproc()->egid;
   ip->nlink = 1;
   iupdate(ip);
 
@@ -344,10 +443,9 @@ sys_mkfifo(void)
 
   argstr(0, path, MAXPATH);
   argint(1, &mode);
-  (void)mode;
 
   begin_op();
-  if((ip = create(path, T_FIFO, 0, 0)) == 0){
+  if((ip = create(path, T_FIFO, 0, 0, (ushort)mode)) == 0){
     end_op();
     return -1;
   }
@@ -374,7 +472,7 @@ sys_open(void)
 
   // O_CREATE 时若文件不存在则创建，否则查找已有 inode。
   if(omode & O_CREATE){
-    ip = create(path, T_FILE, 0, 0);
+    ip = create(path, T_FILE, 0, 0, 0);
     if(ip == 0){
       end_op();
       return -1;
@@ -393,6 +491,18 @@ sys_open(void)
   }
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  // 打开时必须满足请求的读/写权限；O_TRUNC 也要求写权限。
+  int want = 0;
+  if(!(omode & O_WRONLY))
+    want |= 4;
+  if((omode & O_WRONLY) || (omode & O_RDWR) || (omode & O_TRUNC))
+    want |= 2;
+  if(iaccess(ip, want) < 0){
     iunlockput(ip);
     end_op();
     return -1;
@@ -465,7 +575,7 @@ sys_mkdir(void)
   struct inode *ip;
 
   begin_op();
-  if(argstr(0, path, MAXPATH) < 0 || (ip = create(path, T_DIR, 0, 0)) == 0){
+  if(argstr(0, path, MAXPATH) < 0 || (ip = create(path, T_DIR, 0, 0, 0)) == 0){
     end_op();
     return -1;
   }
@@ -485,7 +595,7 @@ sys_mknod(void)
   argint(1, &major);
   argint(2, &minor);
   if((argstr(0, path, MAXPATH)) < 0 ||
-     (ip = create(path, T_DEVICE, major, minor)) == 0){
+     (ip = create(path, T_DEVICE, major, minor, 0)) == 0){
     end_op();
     return -1;
   }
@@ -508,6 +618,11 @@ sys_chdir(void)
   }
   ilock(ip);
   if(ip->type != T_DIR){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  if(iaccess(ip, 1) < 0){
     iunlockput(ip);
     end_op();
     return -1;

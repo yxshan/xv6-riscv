@@ -38,6 +38,15 @@ int shmrm(int);
 int signal(int, uint64);
 int sigkill(int, int);
 void sigreturn(void);
+int chmod(const char*, int);
+int chown(const char*, int, int);
+int getuid(void);
+int geteuid(void);
+int getgid(void);
+int getegid(void);
+int setuid(int);
+int setgid(int);
+int umask(int);
 
 // ulib.c
 int stat(const char*, struct stat*);

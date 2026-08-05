@@ -30,6 +30,9 @@ struct inode {
   short type;         // copy of disk inode
   short major;
   short minor;
+  ushort mode;        // Permission bits (rwxrwxrwx)
+  ushort uid;         // Owner user ID
+  ushort gid;         // Owner group ID
   short nlink;
   uint size;
   uint addrs[NDIRECT+1];

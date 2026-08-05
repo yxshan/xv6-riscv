@@ -248,6 +248,9 @@ iupdate(struct inode *ip)
   dip->type = ip->type;
   dip->major = ip->major;
   dip->minor = ip->minor;
+  dip->mode = ip->mode;
+  dip->uid = ip->uid;
+  dip->gid = ip->gid;
   dip->nlink = ip->nlink;
   dip->size = ip->size;
   memmove(dip->addrs, ip->addrs, sizeof(ip->addrs));
@@ -319,6 +322,9 @@ ilock(struct inode *ip)
     ip->type = dip->type;
     ip->major = dip->major;
     ip->minor = dip->minor;
+    ip->mode = dip->mode;
+    ip->uid = dip->uid;
+    ip->gid = dip->gid;
     ip->nlink = dip->nlink;
     ip->size = dip->size;
     memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
@@ -495,7 +501,30 @@ stati(struct inode *ip, struct stat *st)
   st->ino = ip->inum;
   st->type = ip->type;
   st->nlink = ip->nlink;
+  st->mode = ip->mode;
+  st->uid = ip->uid;
+  st->gid = ip->gid;
   st->size = ip->size;
+}
+
+// 检查当前进程是否对 inode 拥有 want 指定的权限。
+// want 使用与权限位相同的位布局：4=读，2=写，1=执行。
+// root（euid 0）可以绕过读/写/执行检查，简化教学实现。
+int
+iaccess(struct inode *ip, int want)
+{
+  struct proc *p = myproc();
+  ushort perm;
+
+  if(p->euid == 0)
+    return 0;
+  if(p->euid == ip->uid)
+    perm = (ip->mode >> 6) & 7;
+  else if(p->egid == ip->gid)
+    perm = (ip->mode >> 3) & 7;
+  else
+    perm = ip->mode & 7;
+  return (perm & want) == want ? 0 : -1;
 }
 
 // 从 inode 读取数据。调用者必须持有 ip->lock。
@@ -693,6 +722,11 @@ namex(char *path, int nameiparent, char *name)
     ilock(ip);
     // 路径中间元素必须是目录，否则解析失败。
     if(ip->type != T_DIR){
+      iunlockput(ip);
+      return 0;
+    }
+    // 遍历目录必须拥有执行权限，否则拒绝继续解析路径。
+    if(iaccess(ip, 1) < 0){
       iunlockput(ip);
       return 0;
     }

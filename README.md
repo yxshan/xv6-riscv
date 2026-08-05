@@ -28,6 +28,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 符号链接：`ln -s`
 - shell `&&` 短路执行
 - 命名管道 FIFO：`mkfifo`
+- 文件权限与用户/组：`chmod` / `chown` / `setuid` / `setgid` / `umask`
 
 ## 目录结构
 
@@ -125,6 +126,13 @@ $ mkfifo fifo
 $ cat fifo &
 $ echo hello > fifo
 hello
+
+$ id
+uid=0 gid=0 euid=0 egid=0
+
+$ echo hi > permfile
+$ chmod 600 permfile
+$ chown 1 1 permfile
 
 $ crashdump
 === kernel crash dump ===

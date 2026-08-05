@@ -189,6 +189,19 @@
 
 P1 剩余项已全部完成。
 
+### P2 当前状态
+
+第一批已完成：
+
+- 文件权限与用户/组：磁盘 inode 增加 `mode/uid/gid`，进程增加
+  `uid/euid/gid/egid/umask`
+- 权限检查覆盖 `open/exec/chdir` 和路径遍历，以及创建/删除/硬链接
+- 新增系统调用：`chmod`、`chown`、`getuid`、`geteuid`、`getgid`、
+  `getegid`、`setuid`、`setgid`、`umask`
+- 新增工具与测试：`id`、`chmod`、`chown`、`permexec` 和权限测试套件
+
+剩余方向：需求分页与 `mmap`、动态模块 ELF 化、多磁盘支持。
+
 ### P2：进阶方向
 
 适合已经熟悉 xv6 核心后继续深入：

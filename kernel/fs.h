@@ -36,6 +36,10 @@ struct dinode {
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
   uint addrs[NDIRECT+1];   // Data block addresses
+  ushort mode;          // Permission bits (rwxrwxrwx)
+  ushort uid;           // Owner user ID
+  ushort gid;           // Owner group ID
+  uint pad[14];         // Keep sizeof(struct dinode) = 128, a divisor of BSIZE
 };
 
 // Inodes per block.
@@ -59,4 +63,3 @@ struct dirent {
   ushort inum;
   char name[DIRSIZ] __attribute__((nonstring));
 };
-

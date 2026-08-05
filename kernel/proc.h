@@ -107,6 +107,11 @@ struct proc {
   int priority;                // 调度优先级，0 最高，255 最低
   int qlevel;                  // MLFQ 当前队列，0 最高
   int qticks;                  // 当前队列已运行 tick 数
+  ushort uid;                  // 真实用户 ID
+  ushort euid;                 // 有效用户 ID，权限检查使用
+  ushort gid;                  // 真实组 ID
+  ushort egid;                 // 有效组 ID
+  uint umask;                  // 新建文件时屏蔽的权限位
   uint64 sighandlers[NSIG];    // 用户信号处理函数
   uint64 sigpending;           // 待处理信号位图
   struct trapframe sigframe;   // 进入信号处理前保存的用户现场

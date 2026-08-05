@@ -17,6 +17,7 @@ static struct testsuite suites[] = {
   { fs_quicktests, fs_slowtests },
   { proc_quicktests, proc_slowtests },
   { module_quicktests, module_slowtests },
+  { perm_quicktests, perm_slowtests },
 };
 
 // run each test in its own process. run returns 1 if child's exit()
