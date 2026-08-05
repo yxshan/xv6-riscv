@@ -1,6 +1,6 @@
 // 动态模块示例。
 //
-// 它被编译成链接在 DYNMOD_BASE 的原始二进制文件 dynmod。
+// 它被链接为固定地址 DYNMOD_BASE 的 ELF 可执行文件 dynmod。
 // 用户程序 modload 把文件读入内核，加载器调用 module_entry()。
 // 模块通过 api 指针注册自己的 module_call 处理器。
 

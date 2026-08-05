@@ -15,6 +15,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 伪设备：`/dev/sysinfo`、`/dev/stats`
 - `/proc` 支持小缓冲分页读取，进程多时不再截断
 - 教学级动态模块加载：`modload` / `modunload`
+- 动态模块 ELF 格式加载：解析程序头、复制 LOAD 段并初始化 BSS
 - 内核自测模块：`kernel_selftest`
 - P0 工具：`strace`、`perf`、`prio`、`procinfo`
 - 进程优先级调度与 `setpriority`
@@ -205,7 +206,8 @@ KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
 动态模块被链接到固定地址 `DYNMOD_BASE`，通过 `struct kmod_api *` 访问内核
 功能，由 `modload` 加载、`modunload` 卸载。
 
-当前动态模块支持单个模块加载，暂不支持 ELF 重定位和内核符号解析。
+当前动态模块支持单个模块的固定地址 ELF 加载，
+暂不支持 ELF 重定位和内核符号解析。
 
 ## 文档
 

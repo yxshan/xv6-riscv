@@ -1,4 +1,4 @@
-// modload：把动态模块二进制文件加载进内核。
+// modload：把动态模块 ELF 文件加载进内核。
 //
 // 用法：
 //   modload dynmod

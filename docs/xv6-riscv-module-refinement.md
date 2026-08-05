@@ -207,6 +207,39 @@ usertests mmap_after_unmap
 make test-quick
 ```
 
+## P2 批次三：动态模块 ELF 化
+
+状态：已完成
+
+完成内容：
+
+- `dynmod` 从 `objcopy -O binary` 原始格式改为 ELF 可执行文件。
+- 内核动态模块加载器解析 ELF 头，校验 `ET_EXEC`、RISC-V 架构和入口地址。
+- 按程序头复制 LOAD 段到 `DYNMOD_BASE`，并对 BSS 区域清零。
+- 加载失败时完整回滚，不会影响后续重新加载。
+- 新增 `dynmod_badelf` 测试，验证非 ELF 文件会被拒绝。
+
+涉及文件：
+
+- `Makefile`
+- `kernel/module/module.c`
+- `kernel/modules/dynmod_sample.c`
+- `kernel/module/dynmod.h`
+- `user/modload.c`
+- `user/tests/module_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel dynmod fs.img
+usertests dynmod_lifecycle
+usertests dynmod_badelf
+modload dynmod
+modcli 3 1
+modunload
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

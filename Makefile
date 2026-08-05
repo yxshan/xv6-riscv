@@ -50,7 +50,6 @@ UTEST_OBJS = $(patsubst %.c,%.o,$(UTEST_SRCS))
 
 DYNMOD_SRC = $K/modules/dynmod_sample.c
 DYNMOD_OBJ = $K/modules/dynmod_sample.o
-DYNMOD_ELF = $K/modules/dynmod_sample.elf
 DYNMOD_BIN = dynmod
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
@@ -147,8 +146,7 @@ $U/_%: $U/modules/%.o $(ULIB) $U/user.ld
 
 $(DYNMOD_BIN): $(DYNMOD_SRC) $K/module/dynmod.ld
 	$(CC) $(CFLAGS) -fno-pic -c -o $(DYNMOD_OBJ) $(DYNMOD_SRC)
-	$(LD) -T $K/module/dynmod.ld -o $(DYNMOD_ELF) $(DYNMOD_OBJ)
-	$(OBJCOPY) -O binary $(DYNMOD_ELF) $@
+	$(LD) -T $K/module/dynmod.ld -o $@ $(DYNMOD_OBJ)
 
 $U/usys.S : $U/usys.pl
 	perl $U/usys.pl > $U/usys.S
@@ -222,7 +220,7 @@ clean:
 	kernel/modules/*.o kernel/modules/*.d \
 	user/modules/*.o user/modules/*.d $(UMOD_BINS) \
 	user/tests/*.o user/tests/*.d user/tests/*.asm user/tests/*.sym \
-	$(DYNMOD_OBJ) $(DYNMOD_ELF) $(DYNMOD_BIN) \
+	$(DYNMOD_OBJ) $(DYNMOD_BIN) \
 	$K/kernel fs.img \
 	mkfs/mkfs .gdbinit \
         $U/usys.S \

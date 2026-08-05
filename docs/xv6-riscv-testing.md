@@ -178,6 +178,10 @@ P2 批次二新增回归用例：
 - `mmap_badargs`：非法地址、长度、共享映射和设备 fd 被拒绝。
 - `mmap_after_unmap`：`munmap` 后继续访问映射地址会被杀死。
 
+P2 批次三新增回归用例：
+
+- `dynmod_badelf`：非 ELF 动态模块文件应被拒绝，加载失败可安全回滚。
+
 内核自测：
 
 - `SELFTEST_CMD_BASIC`：进程状态、MLFQ 队列、优先级和内存可用性。

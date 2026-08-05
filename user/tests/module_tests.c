@@ -319,6 +319,12 @@ dynmod_lifecycle(char *s)
     free(buf);
     exit(1);
   }
+  if(n < 4 || buf[0] != 0x7f || buf[1] != 'E' ||
+     buf[2] != 'L' || buf[3] != 'F'){
+    printf("%s: dynmod is not an ELF file\n", s);
+    free(buf);
+    exit(1);
+  }
   if(module_load((uint64)buf, st.size) != 0){
     printf("%s: module_load failed\n", s);
     free(buf);
@@ -326,6 +332,43 @@ dynmod_lifecycle(char *s)
   }
   if(module_unload() != 0){
     printf("%s: module_unload failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  free(buf);
+  exit(0);
+}
+
+// 非 ELF 文件应被加载器拒绝，且不影响后续正常加载。
+void
+dynmod_badelf(char *s)
+{
+  char *buf;
+  int fd, n;
+
+  unlink("baddynmod");
+  fd = open("baddynmod", O_CREATE|O_WRONLY);
+  if(fd < 0 || write(fd, "not-an-elf", 10) != 10){
+    printf("%s: create baddynmod failed\n", s);
+    exit(1);
+  }
+  close(fd);
+
+  fd = open("baddynmod", O_RDONLY);
+  if(fd < 0){
+    printf("%s: open baddynmod failed\n", s);
+    exit(1);
+  }
+  buf = malloc(32);
+  if(buf == 0){
+    printf("%s: malloc failed\n", s);
+    exit(1);
+  }
+  n = read(fd, buf, 32);
+  close(fd);
+  unlink("baddynmod");
+  if(n <= 0 || module_load((uint64)buf, n) != -1){
+    printf("%s: bad ELF accepted\n", s);
     free(buf);
     exit(1);
   }
@@ -364,6 +407,7 @@ struct test module_quicktests[] = {
   {signal_ignore, "signal_ignore"},
   {signal_default, "signal_default"},
   {dynmod_lifecycle, "dynmod_lifecycle"},
+  {dynmod_badelf, "dynmod_badelf"},
   {kernel_selftest, "kernel_selftest"},
   { 0, 0},
 };

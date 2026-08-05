@@ -19,6 +19,7 @@
 #include "proc.h"
 #include "fs.h"
 #include "file.h"
+#include "elf.h"
 #include "module.h"
 #include "dynmod.h"
 
@@ -36,6 +37,9 @@ static struct spinlock dynlock;
 static int ndyn;
 static int dyn_loaded;
 static void (*dyn_exit)(void);
+
+#define ET_EXEC 2
+#define EM_RISCV 243
 
 static void
 sort_modules(void)
@@ -202,23 +206,55 @@ module_exit_register(void (*exit_fn)(void))
   return 0;
 }
 
-int
-module_load(uint64 src, int len)
+static int
+module_load_elf(uint64 src, int len)
 {
+  struct elfhdr eh;
+  struct proghdr ph;
   struct kmod_api api;
+  uint64 entry;
   int r;
 
-  if(len <= 0 || len > DYNMOD_SIZE || dyn_loaded)
+  if(len < sizeof(eh))
+    return -1;
+  if(copyin(myproc()->pagetable, (char*)&eh, src, sizeof(eh)) < 0)
+    return -1;
+  if(eh.magic != ELF_MAGIC || eh.type != ET_EXEC || eh.machine != EM_RISCV)
+    return -1;
+  if(eh.phnum <= 0)
+    return -1;
+  if(eh.phoff + (uint64)eh.phnum * eh.phentsize > (uint64)len)
+    return -1;
+  if(eh.entry < DYNMOD_BASE || eh.entry >= DYNMOD_BASE + DYNMOD_SIZE)
     return -1;
 
-  memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
-  ndyn = 0;
-  dyn_exit = 0;
-  if(copyin(myproc()->pagetable, (char*)DYNMOD_BASE, src, len) < 0){
-    memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
-    return -1;
+  for(int i = 0; i < eh.phnum; i++){
+    uint64 phoff = eh.phoff + (uint64)i * eh.phentsize;
+
+    if(phoff + sizeof(ph) > (uint64)len)
+      return -1;
+    if(copyin(myproc()->pagetable, (char*)&ph, src + phoff, sizeof(ph)) < 0)
+      return -1;
+    if(ph.type != ELF_PROG_LOAD)
+      continue;
+    if(ph.vaddr < DYNMOD_BASE ||
+       ph.vaddr + ph.memsz < ph.vaddr ||
+       ph.vaddr + ph.memsz > DYNMOD_BASE + DYNMOD_SIZE ||
+       ph.filesz > ph.memsz)
+      return -1;
+    if(ph.off + ph.filesz > (uint64)len)
+      return -1;
+    if(ph.filesz > 0 &&
+       copyin(myproc()->pagetable,
+              (char*)(DYNMOD_BASE + (ph.vaddr - DYNMOD_BASE)),
+              src + ph.off, ph.filesz) < 0)
+      return -1;
+    if(ph.memsz > ph.filesz)
+      memset((void*)(DYNMOD_BASE + (ph.vaddr - DYNMOD_BASE) + ph.filesz), 0,
+             ph.memsz - ph.filesz);
   }
 
+  entry = eh.entry;
   api.printf = printf;
   api.module_register = module_register;
   api.module_unregister = module_unregister;
@@ -227,8 +263,22 @@ module_load(uint64 src, int len)
   api.freemem = freemem;
   api.ticks = ticks;
 
-  r = ((int (*)(struct kmod_api*))DYNMOD_BASE)(&api);
-  if(r < 0){
+  r = ((int (*)(struct kmod_api*))entry)(&api);
+  return r;
+}
+
+int
+module_load(uint64 src, int len)
+{
+  int r;
+
+  if(len <= 0 || len > DYNMOD_SIZE || dyn_loaded)
+    return -1;
+
+  memset((void*)DYNMOD_BASE, 0, DYNMOD_SIZE);
+  ndyn = 0;
+  dyn_exit = 0;
+  if((r = module_load_elf(src, len)) < 0){
     acquire(&dynlock);
     ndyn = 0;
     release(&dynlock);
