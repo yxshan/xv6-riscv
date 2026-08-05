@@ -189,12 +189,12 @@ P2 批次三新增回归用例：
 
 P2 批次四新增回归用例：
 
-- `disk1_read`：第二磁盘 `/disk1` 可读、可执行，且拒绝写打开与创建。
+- `disk1_read`：第二磁盘 `/disk1` 可读、可执行，并可创建、写入和删除文件。
 
 工具测试新增：
 
-- `ls /disk1` 与 `cat /disk1/README.md` 验证第二磁盘只读挂载。
-- `echo x > /disk1/readonly` 验证第二磁盘写操作被拒绝。
+- `ls /disk1` 与 `cat /disk1/README.md` 验证第二磁盘挂载。
+- `echo WROTE-OK > /disk1/newfile` 验证第二磁盘写操作。
 
 内核自测：
 

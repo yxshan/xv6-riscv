@@ -45,16 +45,14 @@ readsb(int dev, struct superblock *sb)
   brelse(bp);
 }
 
-// 初始化文件系统：校验超级块魔数；根磁盘恢复日志并回收孤立 inode。
+// 初始化文件系统：校验超级块魔数，恢复日志并回收孤立 inode。
 void
 fsinit(int dev) {
   readsb(dev, &sb[dev]);
   if(sb[dev].magic != FSMAGIC)
     panic("invalid file system");
-  if(dev == ROOTDEV){
-    initlog(dev, &sb[dev]);
-    ireclaim(dev);
-  }
+  initlog(dev, &sb[dev]);
+  ireclaim(dev);
 }
 
 // 把一个磁盘块清零。

@@ -249,8 +249,8 @@ make test-quick
 - virtio 驱动从单盘改为 `disks[NDISK]`，初始化两块 MMIO 磁盘。
 - PLIC 与 `devintr` 支持第二块磁盘中断。
 - 文件系统使用 `sb[dev]` 每设备超级块，根磁盘仍负责日志与回收。
-- `/disk1` 作为第二磁盘的只读挂载前缀，支持 `ls`、`cat`、`exec`。
-- 第二磁盘拒绝创建、删除、修改、打开写等操作，避免绕过日志。
+- `/disk1` 作为第二磁盘的挂载前缀，支持 `ls`、`cat`、`exec`。
+- 第二磁盘支持创建、删除、修改和打开写。
 - `Makefile` 增加 `fs2.img` 和第二个 `-drive`，QEMU 双盘启动。
 - `test-xv6.py` 增加 `/disk1` 工具测试，并改为终止整个 QEMU 进程组。
 - 新增 `disk1_read` 用户态回归测试。
@@ -271,7 +271,9 @@ usertests disk1_read
 ls /disk1
 cat /disk1/README.md
 /disk1/echo disk1-ok
-echo x > /disk1/readonly
+echo disk1 > /disk1/newfile
+cat /disk1/newfile
+rm /disk1/newfile
 make test-quick
 ```
 
@@ -344,6 +346,37 @@ modcli 3 1
 modcli 5 1
 modunload 0
 modunload 1
+```
+
+## 完善批次三：第二磁盘可写挂载
+
+状态：已完成
+
+完成内容：
+
+- 日志层重构为全局事务 + 每设备日志，第二磁盘拥有独立日志区。
+- `fsinit()` 为所有磁盘初始化日志并执行孤立 inode 回收。
+- 移除 `/disk1` 的只读限制，支持创建、写入、删除、修改和 `exec`。
+- `disk1_read` 测试扩展为第二磁盘读写往返与删除验证。
+- `test-xv6.py tools` 使用唯一标记验证第二磁盘写入。
+
+涉及文件：
+
+- `kernel/log.c`
+- `kernel/fs.c`
+- `kernel/sysfile.c`
+- `test-xv6.py`
+- `user/tests/fs_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img fs2.img
+usertests disk1_read
+echo disk1 > /disk1/newfile
+cat /disk1/newfile
+rm /disk1/newfile
+make test-quick
 ```
 
 ## 文档入口

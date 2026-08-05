@@ -54,19 +54,6 @@ fdalloc(struct file *f)
   return -1;
 }
 
-// 判断路径是否位于只读挂载的第二磁盘上。
-static int
-readonly_fs(char *path)
-{
-  struct inode *cwd = myproc()->cwd;
-
-  if(path[0] != '/' && cwd->dev == DISK1DEV)
-    return 1;
-  if(strncmp(path, "/disk1", 6) == 0 && (path[6] == 0 || path[6] == '/'))
-    return 1;
-  return 0;
-}
-
 uint64
 sys_dup(void)
 {
@@ -148,8 +135,6 @@ sys_chmod(void)
 
   if(argstr(0, path, MAXPATH) < 0)
     return -1;
-  if(readonly_fs(path))
-    return -1;
   argint(1, &mode);
   if(mode < 0 || mode > PERM_MASK)
     return -1;
@@ -182,8 +167,6 @@ sys_chown(void)
   struct proc *p = myproc();
 
   if(argstr(0, path, MAXPATH) < 0)
-    return -1;
-  if(readonly_fs(path))
     return -1;
   argint(1, &uid);
   argint(2, &gid);
@@ -228,8 +211,6 @@ sys_link(void)
   struct inode *dp, *ip;
 
   if(argstr(0, old, MAXPATH) < 0 || argstr(1, new, MAXPATH) < 0)
-    return -1;
-  if(readonly_fs(old) || readonly_fs(new))
     return -1;
 
   begin_op();
@@ -283,8 +264,6 @@ sys_symlink(void)
 
   if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
     return -1;
-  if(readonly_fs(path))
-    return -1;
 
   begin_op();
   if((ip = create(path, T_SYMLINK, 0, 0, 0)) == 0){
@@ -329,8 +308,6 @@ sys_unlink(void)
   uint off;
 
   if(argstr(0, path, MAXPATH) < 0)
-    return -1;
-  if(readonly_fs(path))
     return -1;
 
   begin_op();
@@ -467,8 +444,6 @@ sys_mkfifo(void)
 
   argstr(0, path, MAXPATH);
   argint(1, &mode);
-  if(readonly_fs(path))
-    return -1;
 
   begin_op();
   if((ip = create(path, T_FIFO, 0, 0, (ushort)mode)) == 0){
@@ -492,8 +467,6 @@ sys_open(void)
 
   argint(1, &omode);
   if((n = argstr(0, path, MAXPATH)) < 0)
-    return -1;
-  if((omode & (O_WRONLY|O_RDWR|O_CREATE|O_TRUNC)) && readonly_fs(path))
     return -1;
 
   begin_op();
@@ -603,8 +576,7 @@ sys_mkdir(void)
   struct inode *ip;
 
   begin_op();
-  if(argstr(0, path, MAXPATH) < 0 || readonly_fs(path) ||
-     (ip = create(path, T_DIR, 0, 0, 0)) == 0){
+  if(argstr(0, path, MAXPATH) < 0 || (ip = create(path, T_DIR, 0, 0, 0)) == 0){
     end_op();
     return -1;
   }
@@ -623,7 +595,7 @@ sys_mknod(void)
   begin_op();
   argint(1, &major);
   argint(2, &minor);
-  if((argstr(0, path, MAXPATH)) < 0 || readonly_fs(path) ||
+  if((argstr(0, path, MAXPATH)) < 0 ||
      (ip = create(path, T_DEVICE, major, minor, 0)) == 0){
     end_op();
     return -1;

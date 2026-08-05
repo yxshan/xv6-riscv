@@ -1583,7 +1583,7 @@ outofinodes(char *s)
   }
 }
 
-// 第二磁盘通过 /disk1 只读挂载，可读文件与执行，但不能写。
+// 第二磁盘通过 /disk1 挂载，可读、可执行、可写。
 void
 disk1_read(char *s)
 {
@@ -1604,9 +1604,20 @@ disk1_read(char *s)
     printf("%s: read /disk1 failed\n", s);
     exit(1);
   }
-  if(open("/disk1/README.md", O_WRONLY) >= 0 ||
-     open("/disk1/newfile", O_CREATE|O_WRONLY) >= 0){
-    printf("%s: second disk should be read-only\n", s);
+  int wfd = open("/disk1/newfile", O_CREATE|O_WRONLY);
+  if(wfd < 0 || write(wfd, "disk1", 5) != 5){
+    printf("%s: write /disk1 failed\n", s);
+    exit(1);
+  }
+  close(wfd);
+  wfd = open("/disk1/newfile", O_RDONLY);
+  if(wfd < 0 || read(wfd, buf, 16) != 5 || buf[0] != 'd'){
+    printf("%s: reread /disk1 failed\n", s);
+    exit(1);
+  }
+  close(wfd);
+  if(unlink("/disk1/newfile") < 0){
+    printf("%s: unlink /disk1 failed\n", s);
     exit(1);
   }
 

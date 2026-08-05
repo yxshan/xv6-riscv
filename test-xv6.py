@@ -286,8 +286,9 @@ def test_tools():
     q.monitor("^echo ", timeout=60)
     q.cmd("cat /disk1/README.md\n")
     q.monitor(".*# xv6-riscv", timeout=60)
-    q.cmd("echo x > /disk1/readonly\n")
-    q.monitor(".*open /disk1/readonly failed", timeout=60)
+    q.cmd("echo WROTE-OK > /disk1/newfile\ncat /disk1/newfile\n")
+    q.monitor(".*WROTE-OK", timeout=60)
+    q.cmd("rm /disk1/newfile\n")
     q.stop()
     print("OK")
 
