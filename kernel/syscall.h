@@ -52,3 +52,6 @@
 #define SYS_swapout 49
 #define SYS_swapinfo 50
 #define SYS_clone 51
+#define SYS_futex_wait 52
+#define SYS_futex_wake 53
+#define SYS_gettid 54

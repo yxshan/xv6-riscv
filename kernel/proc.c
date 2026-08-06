@@ -359,15 +359,16 @@ kfork(void)
 
 // clone：创建共享父进程地址空间的轻量线程。
 // 新线程拥有独立 trapframe、内核栈和页表根，但叶页映射同一物理页。
-// 子线程从 clone 系统调用返回 0，用户代码随后自行切换到目标函数。
+// 子线程从用户库 clone_stub 开始执行 fn(arg)，不依赖父进程栈。
 int
-kclone(uint64 stack)
+kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
 {
   struct proc *np;
   struct proc *p = myproc();
   int i, pid;
 
-  if(stack == 0 || stack >= MAXVA || stack % 16 != 0)
+  if(stack == 0 || stack >= MAXVA || stack % 16 != 0 ||
+     fn == 0 || fn >= MAXVA || stub == 0 || stub >= MAXVA)
     return -1;
 
   if((np = allocproc()) == 0)
@@ -380,9 +381,11 @@ kclone(uint64 stack)
   }
   np->sz = p->sz;
 
-  // 子线程从同一系统调用返回点继续，但返回值是 0，并使用新栈。
+  // 子线程直接进入 clone_stub，寄存器传递 fn/arg，并使用新栈。
   *(np->trapframe) = *(p->trapframe);
-  np->trapframe->a0 = 0;
+  np->trapframe->epc = stub;
+  np->trapframe->a0 = fn;
+  np->trapframe->a1 = arg;
   np->trapframe->sp = stack;
 
   for(i = 0; i < NOFILE; i++)

@@ -113,7 +113,7 @@ uint64          sys_sigkill(void);
 uint64          sys_sigreturn(void);
 void            kexit(int);
 int             kfork(void);
-int             kclone(uint64);
+int             kclone(uint64, uint64, uint64, uint64);
 int             growproc(int);
 void            proc_mapstacks(pagetable_t);
 pagetable_t     proc_pagetable(struct proc *);
@@ -204,6 +204,11 @@ uint64          swap_flags(int);
 int             swap_evict(void);
 uint64          sys_swapout(void);
 uint64          sys_swapinfo(void);
+
+// futex.c
+void            futexinit(void);
+uint64          sys_futex_wait(void);
+uint64          sys_futex_wake(void);
 
 void            module_notify_tick(void);
 void            module_notify_syscall_enter(int);

@@ -588,6 +588,86 @@ prio_boost(char *s)
 
 static int clone_shared;
 
+static int sync_counter;
+static int sync_mutex;
+static int sync_tid;
+static int sync_workers;
+
+static inline int
+sync_atomic_swap(int *p, int v)
+{
+  int prev;
+
+  asm volatile("amoswap.w.aq %0, %1, (%2)"
+               : "=r"(prev) : "r"(v), "r"(p) : "memory");
+  return prev;
+}
+
+static void
+sync_worker(void *arg)
+{
+  sync_workers++;
+  sync_tid = gettid();
+  for(int i = 0; i < 500; i++){
+    while(sync_atomic_swap(&sync_mutex, 1) != 0)
+      futex_wait((uint64)&sync_mutex, 1);
+    sync_counter++;
+    sync_atomic_swap(&sync_mutex, 0);
+    futex_wake((uint64)&sync_mutex, 1);
+  }
+}
+
+// clone + futex：两个线程通过共享 mutex 保护计数器，最终结果必须无丢失更新。
+void
+clone_sync(char *s)
+{
+  char *s1 = sbrk(PGSIZE);
+  char *s2 = sbrk(PGSIZE);
+  int p1, p2;
+
+  if(s1 == SBRK_ERROR || s2 == SBRK_ERROR){
+    printf("%s: sbrk stacks failed\n", s);
+    exit(1);
+  }
+  sync_counter = 0;
+  sync_mutex = 0;
+  sync_tid = 0;
+  sync_workers = 0;
+
+  p1 = thread_create(sync_worker, 0, s1 + PGSIZE);
+  p2 = thread_create(sync_worker, 0, s2 + PGSIZE);
+  if(p1 < 0 || p2 < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+
+  if(wait(0) < 0 || wait(0) < 0){
+    printf("%s: clone wait failed\n", s);
+    exit(1);
+  }
+  if(sync_counter != 1000){
+    printf("%s: counter %d workers %d, expected 1000/2\n",
+           s, sync_counter, sync_workers);
+    exit(1);
+  }
+  if(sync_tid == getpid()){
+    printf("%s: gettid did not return child id\n", s);
+    exit(1);
+  }
+  if(sync_workers != 2){
+    printf("%s: workers %d, expected 2\n", s, sync_workers);
+    exit(1);
+  }
+  sbrk(-2 * PGSIZE);
+  exit(0);
+}
+
+static void
+clone_worker(void *arg)
+{
+  clone_shared = 0x1234;
+}
+
 // clone：新线程共享父进程地址空间，写入对父进程可见。
 void
 clone_basic(char *s)
@@ -600,14 +680,10 @@ clone_basic(char *s)
     exit(1);
   }
   clone_shared = 0;
-  pid = clone(stack + PGSIZE);
+  pid = thread_create(clone_worker, 0, stack + PGSIZE);
   if(pid < 0){
     printf("%s: clone failed\n", s);
     exit(1);
-  }
-  if(pid == 0){
-    clone_shared = 0x1234;
-    exit(0);
   }
   if(wait(0) != pid){
     printf("%s: clone wait failed\n", s);
@@ -627,6 +703,7 @@ struct test proc_quicktests[] = {
   {exectest, "exectest"},
   {pipe1, "pipe1"},
   {clone_basic, "clone_basic"},
+  {clone_sync, "clone_sync"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},
   {exitwait, "exitwait"},

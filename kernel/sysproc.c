@@ -29,6 +29,12 @@ sys_getpid(void)
 }
 
 uint64
+sys_gettid(void)
+{
+  return myproc()->pid;
+}
+
+uint64
 sys_getuid(void)
 {
   return myproc()->uid;
@@ -113,10 +119,13 @@ sys_fork(void)
 uint64
 sys_clone(void)
 {
-  uint64 stack;
+  uint64 fn, arg, stack, stub;
 
-  argaddr(0, &stack);
-  return kclone(stack);
+  argaddr(0, &fn);
+  argaddr(1, &arg);
+  argaddr(2, &stack);
+  argaddr(3, &stub);
+  return kclone(fn, arg, stack, stub);
 }
 
 uint64

@@ -32,6 +32,7 @@ main()
     iinit();         // 初始化 inode 缓存表
     mountinit();     // 初始化 VFS 挂载表锁
     swapinit();      // 初始化交换空间槽位
+    futexinit();     // 初始化 futex 等待表锁
     fileinit();      // 初始化打开文件表
     virtio_disk_init(); // 初始化 QEMU 模拟的 virtio 磁盘
     userinit();      // 创建第一个用户进程 init

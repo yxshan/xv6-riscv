@@ -54,7 +54,11 @@ int mount(int, const char*);
 int umount(const char*);
 int swapout(void);
 int swapinfo(struct swapinfo*);
-int clone(void*);
+int clone(uint64, uint64, uint64, uint64);
+int thread_create(void (*)(void*), void*, void*);
+int futex_wait(uint64, int);
+int futex_wake(uint64, int);
+int gettid(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -553,6 +553,36 @@ usertests clone_basic
 make test-quick
 ```
 
+## P3 批次五：clone 生态（futex / thread_create）
+
+状态：已完成
+
+完成内容：
+
+- 新增 `futex_wait` / `futex_wake` 系统调用，以共享内存地址为等待通道。
+- 新增 `gettid` 系统调用，返回当前线程/进程 pid。
+- 新增用户库 `thread_create(fn, arg, stack)`，通过 `clone_stub` 启动线程。
+- `clone_stub` 是用户态汇编入口，线程从 stub 调用 `fn(arg)` 后自动 `exit(0)`，
+  不依赖父进程栈上的局部变量。
+- 新增 `clone_sync` 测试：两个线程使用 RISC-V `amoswap` 自旋锁 + futex 睡眠，
+  精确累加共享计数器。
+
+涉及文件：
+
+- `kernel/futex.c`、`kernel/defs.h`、`kernel/main.c`
+- `kernel/sysproc.c`、`kernel/syscall.c`、`kernel/syscall.h`
+- `kernel/syscall_names.h`
+- `user/clone_stub.S`、`user/ulib.c`、`user/user.h`、`user/usys.pl`
+- `user/tests/proc_tests.c`、`Makefile`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_sync
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

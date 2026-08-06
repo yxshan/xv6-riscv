@@ -76,3 +76,6 @@ entry("umount");
 entry("swapout");
 entry("swapinfo");
 entry("clone");
+entry("futex_wait");
+entry("futex_wake");
+entry("gettid");

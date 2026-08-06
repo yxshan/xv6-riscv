@@ -167,3 +167,11 @@ sbrklazy(int n) {
   // 惰性 sbrk：只扩展虚拟地址空间，物理页等访问时再分配。
   return sys_sbrk(n, SBRK_LAZY);
 }
+
+extern void clone_stub(void);
+
+int
+thread_create(void (*fn)(void*), void *arg, void *stack)
+{
+  return clone((uint64)fn, (uint64)arg, (uint64)stack, (uint64)clone_stub);
+}

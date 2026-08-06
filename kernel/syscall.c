@@ -138,6 +138,9 @@ extern uint64 sys_umount(void);
 extern uint64 sys_swapout(void);
 extern uint64 sys_swapinfo(void);
 extern uint64 sys_clone(void);
+extern uint64 sys_futex_wait(void);
+extern uint64 sys_futex_wake(void);
+extern uint64 sys_gettid(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -193,6 +196,9 @@ static uint64 (*syscalls[])(void) = {
 [SYS_swapout] sys_swapout,
 [SYS_swapinfo] sys_swapinfo,
 [SYS_clone] sys_clone,
+[SYS_futex_wait] sys_futex_wait,
+[SYS_futex_wake] sys_futex_wake,
+[SYS_gettid] sys_gettid,
 };
 
 void

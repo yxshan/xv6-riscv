@@ -56,6 +56,9 @@
   X(SYS_umount, umount) \
   X(SYS_swapout, swapout) \
   X(SYS_swapinfo, swapinfo) \
-  X(SYS_clone, clone)
+  X(SYS_clone, clone) \
+  X(SYS_futex_wait, futex_wait) \
+  X(SYS_futex_wake, futex_wake) \
+  X(SYS_gettid, gettid)
 
 #endif

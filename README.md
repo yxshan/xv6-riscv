@@ -37,6 +37,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 交换空间：第三块原始交换盘，内存不足时换出、缺页自动换入，`swapinfo` 查看统计
 - ASLR：`exec` 随机化用户栈起始位置，增强地址空间布局随机性
 - `clone` 轻量线程：共享父进程地址空间，使用独立用户栈、trapframe 与内核栈
+- `futex` 与 `thread_create`：用户态互斥同步、线程入口 stub 与 `gettid`
 
 ## 目录结构
 
