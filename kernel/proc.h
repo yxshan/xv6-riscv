@@ -93,6 +93,15 @@ struct proc_files {
   struct inode *cwd;
 };
 
+// 共享的信号状态。clone 线程共享处理函数表和线程组待处理信号，
+// 每个线程仍保留自己的阻塞掩码和 per-thread 待处理位图。
+struct proc_sig {
+  struct spinlock lock;
+  int ref;
+  uint64 handlers[NSIG]; // 信号处理函数表
+  uint64 pending;        // 线程组待处理信号
+};
+
 // 共享的 VMA 表。clone 线程共享同一份，并增加 ref。
 struct proc_vmas {
   struct sleeplock lock;
@@ -135,8 +144,9 @@ struct proc {
   ushort gid;                  // 真实组 ID
   ushort egid;                 // 有效组 ID
   uint umask;                  // 新建文件时屏蔽的权限位
-  uint64 sighandlers[NSIG];    // 用户信号处理函数
-  uint64 sigpending;           // 待处理信号位图
+  struct proc_sig *sig;        // 共享信号处理表与线程组待处理信号
+  uint64 sigpending;           // 当前线程待处理信号位图
+  uint64 sigblocked;           // 当前线程信号阻塞掩码
   struct trapframe sigframe;   // 进入信号处理前保存的用户现场
   int sigactive;               // 当前是否正在执行信号处理函数
 

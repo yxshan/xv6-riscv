@@ -124,6 +124,52 @@ allocpid()
   return pid;
 }
 
+struct proc_sig*
+proc_sig_alloc(void)
+{
+  struct proc_sig *ps = kalloc();
+
+  if(ps == 0)
+    return 0;
+  memset(ps, 0, PGSIZE);
+  initlock(&ps->lock, "proc_sig");
+  ps->ref = 1;
+  return ps;
+}
+
+void
+proc_sig_share(struct proc_sig *ps)
+{
+  acquire(&ps->lock);
+  ps->ref++;
+  release(&ps->lock);
+}
+
+// fork 时复制信号处理表；线程组待处理信号不继承。
+void
+proc_sig_copy(struct proc_sig *dst, struct proc_sig *src)
+{
+  acquire(&src->lock);
+  for(int i = 0; i < NSIG; i++)
+    dst->handlers[i] = src->handlers[i];
+  release(&src->lock);
+}
+
+void
+proc_sig_release(struct proc_sig *ps)
+{
+  int last = 0;
+
+  if(ps == 0)
+    return;
+  acquire(&ps->lock);
+  if(--ps->ref == 0)
+    last = 1;
+  release(&ps->lock);
+  if(last)
+    kfree(ps);
+}
+
 // 在进程表中查找 UNUSED 槽位，并初始化运行所需的资源：
 // trapframe 页、用户页表、内核上下文等。
 // 成功时持有 p->lock 返回；失败返回 0。
@@ -158,9 +204,10 @@ found:
   p->egid = 0;
   p->umask = 022;
   p->vmas = 0;
+  p->sig = 0;
   p->sigpending = 0;
+  p->sigblocked = 0;
   p->sigactive = 0;
-  memset(p->sighandlers, 0, sizeof(p->sighandlers));
   p->state = USED;
 
   // 分配保存用户寄存器现场的 trapframe 页面。
@@ -193,6 +240,7 @@ static void
 freeproc(struct proc *p)
 {
   proc_vmas_release(p);
+  proc_sig_release(p->sig);
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
@@ -207,12 +255,14 @@ freeproc(struct proc *p)
   p->kthread_arg = 0;
   p->files = 0;
   p->vmas = 0;
+  p->sig = 0;
   p->parent = 0;
   p->name[0] = 0;
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
   p->sigpending = 0;
+  p->sigblocked = 0;
   p->sigactive = 0;
   p->state = UNUSED;
 }
@@ -278,6 +328,9 @@ userinit(void)
   p->vmas = proc_vmas_alloc();
   if(p->vmas == 0)
     panic("proc_vmas_alloc");
+  p->sig = proc_sig_alloc();
+  if(p->sig == 0)
+    panic("proc_sig_alloc");
 
   p->state = RUNNABLE;
 
@@ -365,6 +418,18 @@ kfork(void)
     return -1;
   }
   proc_files_copy(np->files, p->files);
+  np->sig = proc_sig_alloc();
+  if(np->sig == 0){
+    proc_files_release(np->files);
+    np->files = 0;
+    proc_vmas_release(np);
+    acquire(&np->lock);
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  proc_sig_copy(np->sig, p->sig);
+  np->sigblocked = p->sigblocked;
 
   safestrcpy(np->name, p->name, sizeof(p->name));
   np->priority = p->priority;
@@ -409,7 +474,7 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   if((np = allocproc()) == 0)
     return -1;
 
-  if(p->vmas == 0){
+  if(p->vmas == 0 || p->sig == 0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -436,6 +501,9 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   proc_files_share(p->files);
   np->vmas = p->vmas;
   proc_vmas_share(p->vmas);
+  np->sig = p->sig;
+  proc_sig_share(p->sig);
+  np->sigblocked = p->sigblocked;
 
   safestrcpy(np->name, p->name, sizeof(p->name));
   np->priority = p->priority;
@@ -510,10 +578,11 @@ kthread_create(void (*fn)(void*), void *arg)
     p->pagetable = 0;
     p->files = 0;
     p->vmas = 0;
+    p->sig = 0;
     p->sz = 0;
     p->sigpending = 0;
+    p->sigblocked = 0;
     p->sigactive = 0;
-    memset(p->sighandlers, 0, sizeof(p->sighandlers));
     p->state = USED;
 
     memset(&p->context, 0, sizeof(p->context));
@@ -608,6 +677,8 @@ kexit(int status)
   p->files = 0;
 
   proc_vmas_release(p);
+  proc_sig_release(p->sig);
+  p->sig = 0;
 
   acquire(&wait_lock);
 
@@ -822,54 +893,117 @@ ksignal(int sig, uint64 handler)
 {
   struct proc *p = myproc();
 
-  if(sig <= 0 || sig >= NSIG)
+  if(sig <= 0 || sig >= NSIG || p->sig == 0)
     return -1;
-  acquire(&p->lock);
+  acquire(&p->sig->lock);
   if(handler == SIG_DFL)
-    p->sighandlers[sig] = 2;
+    p->sig->handlers[sig] = 2;
   else if(handler == SIG_IGN)
-    p->sighandlers[sig] = 3;
+    p->sig->handlers[sig] = 3;
   else
     // 用户程序从地址 0 开始；用 handler+16 编码普通处理函数。
-    p->sighandlers[sig] = handler + 16;
+    p->sig->handlers[sig] = handler + 16;
+  release(&p->sig->lock);
+  return 0;
+}
+
+// 向单个线程递送信号：默认动作终止线程，自定义处理函数进入待处理位图。
+static int
+signal_deliver_thread(struct proc *p, int sig)
+{
+  uint64 h;
+
+  if(p == 0 || p->sig == 0 || sig <= 0 || sig >= NSIG)
+    return -1;
+
+  if(sig == SIGKILL){
+    acquire(&p->lock);
+    p->killed = 1;
+    if(p->state == SLEEPING)
+      p->state = RUNNABLE;
+    release(&p->lock);
+    return 0;
+  }
+
+  acquire(&p->sig->lock);
+  h = p->sig->handlers[sig];
+  release(&p->sig->lock);
+
+  if(h == 3) // SIG_IGN
+    return 0;
+
+  acquire(&p->lock);
+  if(h == 0 || h == 2){ // SIG_DFL
+    p->killed = 1;
+    if(p->state == SLEEPING)
+      p->state = RUNNABLE;
+  } else {
+    p->sigpending |= (1UL << sig);
+    if(p->state == SLEEPING)
+      p->state = RUNNABLE;
+  }
   release(&p->lock);
   return 0;
 }
 
-// 向指定进程发送信号。
+// 向整个线程组递送信号：优先投递给未阻塞该信号的线程；
+// 全部阻塞时放入共享线程组待处理位图。
+static int
+signal_group(struct proc *leader, int sig)
+{
+  struct proc *p;
+
+  if(leader == 0 || leader->sig == 0 || sig <= 0 || sig >= NSIG)
+    return -1;
+
+  if(sig == SIGKILL){
+    for(p = proc; p < &proc[NPROC]; p++){
+      if(p->state != UNUSED && p->tgid == leader->tgid)
+        signal_deliver_thread(p, SIGKILL);
+    }
+    return 0;
+  }
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    int blocked;
+
+    if(p->state == UNUSED || p->tgid != leader->tgid)
+      continue;
+    acquire(&p->lock);
+    blocked = (p->sigblocked & (1UL << sig)) != 0;
+    release(&p->lock);
+    if(!blocked)
+      return signal_deliver_thread(p, sig);
+  }
+
+  acquire(&leader->sig->lock);
+  leader->sig->pending |= (1UL << sig);
+  release(&leader->sig->lock);
+  return 0;
+}
+
+// 向指定进程/线程组发送信号。
 int
 ksigkill(int pid, int sig)
 {
-  struct proc *p;
+  struct proc *p, *leader = 0;
 
   if(sig <= 0 || sig >= NSIG)
     return -1;
 
   for(p = proc; p < &proc[NPROC]; p++){
-    acquire(&p->lock);
-    if(p->pid == pid){
-      if(sig == SIGKILL){
-        p->killed = 1;
-        if(p->state == SLEEPING)
-          p->state = RUNNABLE;
-      } else {
-        // 未设置处理函数或显式 SIG_DFL 时，默认动作是终止进程。
-        if(p->sighandlers[sig] == 0 || p->sighandlers[sig] == 2){
-          p->killed = 1;
-          if(p->state == SLEEPING)
-            p->state = RUNNABLE;
-        } else if(p->sighandlers[sig] != 3){
-          p->sigpending |= (1UL << sig);
-          if(p->state == SLEEPING)
-            p->state = RUNNABLE;
-        }
-      }
-      release(&p->lock);
-      return 0;
-    }
-    release(&p->lock);
+    if(p->state == UNUSED)
+      continue;
+    if(p->pid == pid && p->tgid != pid)
+      return signal_deliver_thread(p, sig);
+    if(p->pid == pid && p->tgid == pid)
+      leader = p;
+    if(leader == 0 && p->tgid == pid)
+      leader = p;
   }
-  return -1;
+  if(leader == 0)
+    return -1;
+  return signal_group(leader, sig);
 }
 
 uint64
@@ -901,6 +1035,44 @@ sys_sigreturn(void)
   // 恢复进入信号处理前保存的用户现场。
   *p->trapframe = p->sigframe;
   p->sigactive = 0;
+  return 0;
+}
+
+uint64
+sys_sigprocmask(void)
+{
+  struct proc *p = myproc();
+  uint64 setaddr, oldsetaddr, set = 0, old, nset;
+  int how;
+
+  argint(0, &how);
+  argaddr(1, &setaddr);
+  argaddr(2, &oldsetaddr);
+  if(how < SIG_BLOCK || how > SIG_SETMASK)
+    return -1;
+  if(setaddr != 0 &&
+     copyin(p->pagetable, (char*)&set, setaddr, sizeof(set)) < 0)
+    return -1;
+  if(set & (1UL << SIGKILL))
+    return -1;
+
+  old = p->sigblocked;
+  if(oldsetaddr != 0 &&
+     copyout(p->pagetable, oldsetaddr, (char*)&old, sizeof(old)) < 0)
+    return -1;
+
+  switch(how){
+  case SIG_BLOCK:
+    nset = old | set;
+    break;
+  case SIG_UNBLOCK:
+    nset = old & ~set;
+    break;
+  default:
+    nset = set;
+    break;
+  }
+  p->sigblocked = nset & ~(1UL << SIGKILL);
   return 0;
 }
 
@@ -1003,6 +1175,19 @@ forkret(void)
 
 // 让当前进程在通道 chan 上睡眠，并释放条件锁 lk。
 // 被唤醒后重新获取 lk。
+static int
+sig_pending_unblocked(struct proc *p)
+{
+  uint64 pending = p->sigpending;
+
+  if(p->sig){
+    acquire(&p->sig->lock);
+    pending |= p->sig->pending;
+    release(&p->sig->lock);
+  }
+  return (pending & ~p->sigblocked) != 0;
+}
+
 void
 sleep(void *chan, struct spinlock *lk)
 {
@@ -1014,6 +1199,13 @@ sleep(void *chan, struct spinlock *lk)
 
   acquire(&p->lock);  //DOC: sleeplock1
   release(lk);
+
+  // 已有可投递信号时不进入睡眠，让调用者返回用户态后先处理信号。
+  if(sig_pending_unblocked(p)){
+    release(&p->lock);
+    acquire(lk);
+    return;
+  }
 
   // 记录等待通道并进入 SLEEPING 状态，然后切换回调度器。
   p->chan = chan;
@@ -1070,22 +1262,22 @@ kkill(int pid)
   return found ? 0 : -1;
 }
 
-// 精确终止线程组中指定 tid 的线程；sig==0 只做存在性检查。
+// 精确向线程组中指定 tid 递送信号；sig==0 只做存在性检查。
 int
 ktgkill(int tgid, int tid, int sig)
 {
   struct proc *p;
 
+  if(sig < 0 || sig >= NSIG)
+    return -1;
+
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->state != UNUSED && p->tgid == tgid && p->pid == tid){
-      if(sig != 0){
-        p->killed = 1;
-        if(p->state == SLEEPING)
-          p->state = RUNNABLE;
-      }
       release(&p->lock);
-      return 0;
+      if(sig == 0)
+        return 0;
+      return signal_deliver_thread(p, sig);
     }
     release(&p->lock);
   }

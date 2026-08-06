@@ -63,6 +63,7 @@
   X(SYS_waitpid, waitpid) \
   X(SYS_set_tls, set_tls) \
   X(SYS_get_tls, get_tls) \
-  X(SYS_tgkill, tgkill)
+  X(SYS_tgkill, tgkill) \
+  X(SYS_sigprocmask, sigprocmask)
 
 #endif

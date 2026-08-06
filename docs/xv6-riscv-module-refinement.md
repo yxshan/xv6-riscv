@@ -794,6 +794,39 @@ usertests -q
 make test-quick
 ```
 
+## P3 批次十四：线程组信号与 sigprocmask
+
+状态：已完成
+
+完成内容：
+
+- 新增共享信号状态 `struct proc_sig`，clone 线程共享信号处理表与线程组待处理信号。
+- fork 复制信号处理表但不继承待处理信号；clone 线程共享同一信号状态。
+- `tgkill` 从“杀死指定线程”改为“向指定 tid 投递信号”，支持默认、忽略和自定义处理函数。
+- `sigprocmask` 支持 `SIG_BLOCK` / `SIG_UNBLOCK` / `SIG_SETMASK`，阻塞信号保持待处理。
+- `deliver_signal` 同时处理 per-thread 待处理信号和线程组待处理信号，并跳过被阻塞的信号。
+- `sleep()` 增加待投递信号检查，避免信号先于睡眠到达时线程继续睡死。
+- 新增 `sig_mask`、`clone_signal` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/trap.c`
+- `kernel/signal.h`、`kernel/defs.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`
+- `user/tests/module_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests sig_mask
+usertests clone_signal
+usertests signal_no_reenter
+usertests clone_tgkill
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

@@ -45,32 +45,77 @@ trapinithart(void)
 static void
 deliver_signal(struct proc *p)
 {
+  uint64 pending, blocked, h;
+
+  if(p->sig == 0 || p->sigactive)
+    return;
+
+  acquire(&p->lock);
+  pending = p->sigpending;
+  blocked = p->sigblocked;
+  release(&p->lock);
+
+  // 先投递精确指向当前线程的信号。
   for(int sig = 1; sig < NSIG; sig++){
-    uint64 h = p->sighandlers[sig];
-    if((p->sigpending & (1UL << sig)) == 0 || h == 0)
+    if((pending & (1UL << sig)) == 0 || (blocked & (1UL << sig)))
       continue;
-    // handler + 16 存储：2 表示 SIG_DFL，3 表示 SIG_IGN。
-    if(h == 3){
+
+    acquire(&p->sig->lock);
+    h = p->sig->handlers[sig];
+    release(&p->sig->lock);
+
+    if(h == 3){ // SIG_IGN
+      acquire(&p->lock);
       p->sigpending &= ~(1UL << sig);
+      release(&p->lock);
       continue;
     }
-    if(h == 2){
+    if(h == 0 || h == 2){ // SIG_DFL
+      acquire(&p->lock);
       p->sigpending &= ~(1UL << sig);
       p->killed = 1;
+      release(&p->lock);
       continue;
     }
-    // 信号处理函数执行期间不再重入，新信号留到 sigreturn 后交付。
-    if(p->sigactive)
+
+    acquire(&p->lock);
+    p->sigpending &= ~(1UL << sig);
+    release(&p->lock);
+    p->sigactive = 1;
+    p->sigframe = *p->trapframe;
+    p->trapframe->epc = h - 16;
+    p->trapframe->a0 = sig;
+    return;
+  }
+
+  // 再处理线程组共享的待处理信号。
+  acquire(&p->sig->lock);
+  for(int sig = 1; sig < NSIG; sig++){
+    if((p->sig->pending & (1UL << sig)) == 0 ||
+       (blocked & (1UL << sig)))
       continue;
-    {
-      p->sigpending &= ~(1UL << sig);
-      p->sigactive = 1;
-      p->sigframe = *p->trapframe;
-      p->trapframe->epc = h - 16;
-      p->trapframe->a0 = sig;
+    h = p->sig->handlers[sig];
+    if(h == 3){ // SIG_IGN
+      p->sig->pending &= ~(1UL << sig);
+      continue;
+    }
+    if(h == 0 || h == 2){ // SIG_DFL
+      p->sig->pending &= ~(1UL << sig);
+      release(&p->sig->lock);
+      acquire(&p->lock);
+      p->killed = 1;
+      release(&p->lock);
       return;
     }
+    p->sig->pending &= ~(1UL << sig);
+    release(&p->sig->lock);
+    p->sigactive = 1;
+    p->sigframe = *p->trapframe;
+    p->trapframe->epc = h - 16;
+    p->trapframe->a0 = sig;
+    return;
   }
+  release(&p->sig->lock);
 }
 
 //

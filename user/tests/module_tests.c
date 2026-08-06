@@ -215,6 +215,9 @@ procinfo_full(char *s)
 
 static int in_handler;
 static int bad_reenter;
+static int masked_delivered;
+static int clone_sig_count;
+static int clone_sig_seen;
 
 static void
 reenter_handler(int sig)
@@ -287,6 +290,102 @@ signal_default(char *s)
     printf("%s: SIG_DFL did not terminate child\n", s);
     exit(1);
   }
+  exit(0);
+}
+
+static void
+mask_handler(int sig)
+{
+  masked_delivered++;
+  sigreturn();
+}
+
+// sigprocmask：阻塞期间信号保持待处理，解除阻塞后在下一次返回用户态时投递。
+void
+sig_mask(char *s)
+{
+  uint64 set = 1UL << SIGUSR1;
+  uint64 old;
+
+  masked_delivered = 0;
+  if(signal(SIGUSR1, (uint64)mask_handler) < 0){
+    printf("%s: signal failed\n", s);
+    exit(1);
+  }
+  if(sigprocmask(SIG_BLOCK, &set, 0) < 0){
+    printf("%s: sigprocmask block failed\n", s);
+    exit(1);
+  }
+  if(sigkill(getpid(), SIGUSR1) < 0){
+    printf("%s: sigkill failed\n", s);
+    exit(1);
+  }
+  pause(5);
+  if(masked_delivered != 0){
+    printf("%s: blocked signal delivered early\n", s);
+    exit(1);
+  }
+  if(sigprocmask(SIG_UNBLOCK, &set, &old) < 0){
+    printf("%s: sigprocmask unblock failed\n", s);
+    exit(1);
+  }
+  if(masked_delivered != 1){
+    printf("%s: unblocked signal not delivered\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+static void
+clone_sig_handler(int sig)
+{
+  clone_sig_count++;
+  clone_sig_seen = 1;
+  sigreturn();
+}
+
+static void
+clone_sig_worker(void *arg)
+{
+  while(!clone_sig_seen)
+    pause(1);
+}
+
+// clone 线程共享信号处理表：tgkill 精确投递后子线程执行处理器。
+void
+clone_signal(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  clone_sig_count = 0;
+  clone_sig_seen = 0;
+  if(signal(SIGUSR1, (uint64)clone_sig_handler) < 0){
+    printf("%s: signal failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(clone_sig_worker, 0, stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(tgkill(getpid(), pid, SIGUSR1) < 0){
+    printf("%s: tgkill failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, 0) != pid){
+    printf("%s: clone_signal wait failed\n", s);
+    exit(1);
+  }
+  if(clone_sig_count != 1){
+    printf("%s: clone signal handler count %d\n", s, clone_sig_count);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
   exit(0);
 }
 
@@ -488,6 +587,8 @@ struct test module_quicktests[] = {
   {signal_no_reenter, "signal_no_reenter"},
   {signal_ignore, "signal_ignore"},
   {signal_default, "signal_default"},
+  {sig_mask, "sig_mask"},
+  {clone_signal, "clone_signal"},
   {dynmod_lifecycle, "dynmod_lifecycle"},
   {dynmod_multi, "dynmod_multi"},
   {dynmod_badelf, "dynmod_badelf"},

@@ -63,6 +63,7 @@ int waitpid(int, int*);
 int set_tls(uint64);
 uint64 get_tls(void);
 int tgkill(int, int, int);
+int sigprocmask(int, uint64*, uint64*);
 
 // ulib.c
 int stat(const char*, struct stat*);
