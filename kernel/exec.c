@@ -19,6 +19,20 @@
 
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
+#define ASLR_STACK_PAGES 16
+
+// 简单线性同余伪随机数生成器，供 exec 随机化用户栈位置。
+static uint64 aslr_seed;
+
+static uint64
+aslr_rand(void)
+{
+  if(aslr_seed == 0)
+    aslr_seed = r_time() ^ ((uint64)myproc()->pid << 32) ^ 0x9e3779b97f4a7c15UL;
+  aslr_seed = aslr_seed * 6364136223846793005UL + 1442695040888963407UL;
+  return aslr_seed >> 33;
+}
+
 // 把 ELF 段权限标志映射为 RISC-V PTE 权限位。
 int flags2perm(int flags)
 {
@@ -103,8 +117,10 @@ kexec(char *path, char **argv)
   // 最上面一页不设置 PTE_U，作为保护页捕获栈溢出；
   // 其余页作为用户栈。
   sz = PGROUNDUP(sz);
+  uint64 stackgap = (aslr_rand() % (ASLR_STACK_PAGES + 1)) * PGSIZE;
   uint64 sz1;
-  if((sz1 = uvmalloc(pagetable, sz, sz + (USERSTACK+1)*PGSIZE, PTE_W)) == 0)
+  if((sz1 = uvmalloc(pagetable, sz + stackgap,
+                     sz + stackgap + (USERSTACK+1)*PGSIZE, PTE_W)) == 0)
     goto bad;
   sz = sz1;
   uvmclear(pagetable, sz-(USERSTACK+1)*PGSIZE);

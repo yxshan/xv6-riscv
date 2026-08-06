@@ -295,6 +295,16 @@ def test_tools():
     q.monitor("^\\$ uid=0 gid=0 euid=0 egid=0|^uid=0 gid=0 euid=0 egid=0", timeout=60)
     q.cmd("swapinfo\n")
     q.monitor("^swap total ", timeout=60)
+    aslr_addrs = []
+    for i in range(5):
+        q.cmd("aslr\n")
+        q.monitor("^aslr stack ", timeout=60)
+        aslr_addrs.append(
+            [line for line in q.lines() if re.match("^aslr stack ", line)][-1])
+    if len(set(aslr_addrs)) < 2:
+        print("FAIL: ASLR stack did not vary across runs")
+        q.stop()
+        sys.exit(1)
     q.cmd("ls /disk1\n")
     q.monitor("^echo ", timeout=60)
     q.cmd("cat /disk1/README.md\n")

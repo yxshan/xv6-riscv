@@ -497,6 +497,33 @@ swapinfo
 make test-quick
 ```
 
+## P3 批次三：ASLR
+
+状态：已完成
+
+完成内容：
+
+- `exec` 在分配用户栈前生成随机页偏移，栈起始位置在 0 到 16 页之间变化。
+- 使用 `r_time()`、进程号和线性同余生成器初始化随机种子。
+- 保留 mmap 与堆的固定布局，避免破坏现有需求分页和惰性分配测试。
+- 新增 `aslr` 用户工具，打印当前用户栈地址。
+- `test-xv6.py tools` 连续运行两次 `aslr`，确认地址不同。
+
+涉及文件：
+
+- `kernel/exec.c`
+- `user/aslr.c`
+- `Makefile`、`test-xv6.py`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img
+aslr
+aslr
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

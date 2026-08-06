@@ -218,6 +218,7 @@ UPROGS=\
 	$U/_mount\
 	$U/_umount\
 	$U/_swapinfo\
+	$U/_aslr\
 	$(UMOD_BINS)\
 
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)

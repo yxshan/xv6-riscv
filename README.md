@@ -35,6 +35,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - VFS 挂载表：`mount` / `umount` 支持把第二磁盘挂到任意目录，`/disk1` 为默认挂载点，同一设备同一时刻一个挂载点
 - 双重间接块：单文件上限从 268KB 扩展到约 64MB
 - 交换空间：第三块原始交换盘，内存不足时换出、缺页自动换入，`swapinfo` 查看统计
+- ASLR：`exec` 随机化用户栈起始位置，增强地址空间布局随机性
 
 ## 目录结构
 
@@ -138,6 +139,9 @@ uid=0 gid=0 euid=0 egid=0
 
 $ swapinfo
 swap total 2048 free 2048 swapouts 0 swapins 0
+
+$ aslr
+aslr stack 3ffffff8e0
 
 $ echo hi > permfile
 $ chmod 600 permfile
