@@ -79,3 +79,4 @@ entry("clone");
 entry("futex_wait");
 entry("futex_wake");
 entry("gettid");
+entry("waitpid");

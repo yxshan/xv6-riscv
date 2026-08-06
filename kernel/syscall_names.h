@@ -59,6 +59,7 @@
   X(SYS_clone, clone) \
   X(SYS_futex_wait, futex_wait) \
   X(SYS_futex_wake, futex_wake) \
-  X(SYS_gettid, gettid)
+  X(SYS_gettid, gettid) \
+  X(SYS_waitpid, waitpid)
 
 #endif

@@ -59,6 +59,7 @@ int thread_create(void (*)(void*), void*, void*);
 int futex_wait(uint64, int);
 int futex_wake(uint64, int);
 int gettid(void);
+int waitpid(int, int*);
 
 // ulib.c
 int stat(const char*, struct stat*);

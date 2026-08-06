@@ -250,6 +250,10 @@ P3 批次九新增回归用例：
 
 - `clone_group_exit`：组长 exit 时同 tgid 线程被终止并回收，进程数恢复。
 
+P3 批次十新增回归用例：
+
+- `clone_join`：父线程用 `waitpid` 按 tid 精确等待两个 clone 线程。
+
 工具测试新增：
 
 - `swapinfo`：显示交换盘总页数、空闲页数和换入换出计数。

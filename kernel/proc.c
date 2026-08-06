@@ -653,6 +653,48 @@ kwait(uint64 addr)
   }
 }
 
+// 等待指定 pid 的子进程/线程退出，用于 thread join。
+int
+kwaitpid(int pid, uint64 addr)
+{
+  struct proc *pp;
+  struct proc *p = myproc();
+  int found;
+
+  if(pid <= 0)
+    return -1;
+
+  acquire(&wait_lock);
+  for(;;){
+    found = 0;
+    for(pp = proc; pp < &proc[NPROC]; pp++){
+      if(pp->parent == p && pp->pid == pid){
+        acquire(&pp->lock);
+        found = 1;
+        if(pp->state == ZOMBIE){
+          int xpid = pp->pid;
+          if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
+                                  sizeof(pp->xstate)) < 0){
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          freeproc(pp);
+          release(&pp->lock);
+          release(&wait_lock);
+          return xpid;
+        }
+        release(&pp->lock);
+      }
+    }
+    if(!found || killed(p)){
+      release(&wait_lock);
+      return -1;
+    }
+    sleep(p, &wait_lock);
+  }
+}
+
 // 每 CPU 的调度器主循环，永不返回。
 // 它反复扫描进程表，选中 RUNNABLE 进程后通过 swtch() 切入；
 // 进程让出 CPU 时会再次 swtch() 回到这里，调度器继续选下一个进程。

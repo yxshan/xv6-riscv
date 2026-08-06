@@ -687,6 +687,31 @@ usertests clone_group_exit
 make test-quick
 ```
 
+## P3 批次十：waitpid 线程 join
+
+状态：已完成
+
+完成内容：
+
+- 新增 `waitpid(pid, status)` 系统调用，等待指定子线程/子进程退出。
+- `kwaitpid()` 复用 `wait_lock` 与 ZOMBIE 回收流程，只回收指定 pid。
+- 新增 `clone_join` 回归测试：父线程精确 join 两个 clone 线程并检查退出状态。
+
+涉及文件：
+
+- `kernel/proc.c`、`kernel/sysproc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/defs.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_join
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

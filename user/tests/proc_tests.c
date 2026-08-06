@@ -595,12 +595,26 @@ static int sync_workers;
 static int tgid_child_pid;
 static int tgid_child_tid;
 static int shared_fd;
+static int join_val1;
+static int join_val2;
 
 static void
 group_worker(void *arg)
 {
   for(;;)
     pause(1000);
+}
+
+static void
+join_worker1(void *arg)
+{
+  join_val1 = 1;
+}
+
+static void
+join_worker2(void *arg)
+{
+  join_val2 = 2;
 }
 
 static inline int
@@ -686,6 +700,39 @@ clone_sync(char *s)
   }
   if(sync_workers != 2){
     printf("%s: workers %d, expected 2\n", s, sync_workers);
+    exit(1);
+  }
+  sbrk(-2 * PGSIZE);
+  exit(0);
+}
+
+// waitpid：父线程按 tid 精确等待并回收指定 clone 线程。
+void
+clone_join(char *s)
+{
+  char *s1 = sbrk(PGSIZE);
+  char *s2 = sbrk(PGSIZE);
+  int p1, p2, st1, st2;
+
+  if(s1 == SBRK_ERROR || s2 == SBRK_ERROR){
+    printf("%s: sbrk stacks failed\n", s);
+    exit(1);
+  }
+  join_val1 = 0;
+  join_val2 = 0;
+  p1 = thread_create(join_worker1, 0, s1 + PGSIZE);
+  p2 = thread_create(join_worker2, 0, s2 + PGSIZE);
+  if(p1 < 0 || p2 < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(waitpid(p1, &st1) != p1 || st1 != 0 ||
+     waitpid(p2, &st2) != p2 || st2 != 0){
+    printf("%s: waitpid failed\n", s);
+    exit(1);
+  }
+  if(join_val1 != 1 || join_val2 != 2){
+    printf("%s: join workers did not run\n", s);
     exit(1);
   }
   sbrk(-2 * PGSIZE);
@@ -873,6 +920,7 @@ struct test proc_quicktests[] = {
   {clone_tgid, "clone_tgid"},
   {clone_files, "clone_files"},
   {clone_cwd, "clone_cwd"},
+  {clone_join, "clone_join"},
   {clone_group_exit, "clone_group_exit"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},

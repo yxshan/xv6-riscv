@@ -55,3 +55,4 @@
 #define SYS_futex_wait 52
 #define SYS_futex_wake 53
 #define SYS_gettid 54
+#define SYS_waitpid 55
