@@ -62,6 +62,7 @@ int gettid(void);
 int waitpid(int, int*);
 int set_tls(uint64);
 uint64 get_tls(void);
+int tgkill(int, int, int);
 
 // ulib.c
 int stat(const char*, struct stat*);

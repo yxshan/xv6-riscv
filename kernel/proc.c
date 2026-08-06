@@ -1043,6 +1043,28 @@ kkill(int pid)
   return found ? 0 : -1;
 }
 
+// 精确终止线程组中指定 tid 的线程；sig==0 只做存在性检查。
+int
+ktgkill(int tgid, int tid, int sig)
+{
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED && p->tgid == tgid && p->pid == tid){
+      if(sig != 0){
+        p->killed = 1;
+        if(p->state == SLEEPING)
+          p->state = RUNNABLE;
+      }
+      release(&p->lock);
+      return 0;
+    }
+    release(&p->lock);
+  }
+  return -1;
+}
+
 void
 setkilled(struct proc *p)
 {

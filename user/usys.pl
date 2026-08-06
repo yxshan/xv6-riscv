@@ -82,3 +82,4 @@ entry("gettid");
 entry("waitpid");
 entry("set_tls");
 entry("get_tls");
+entry("tgkill");

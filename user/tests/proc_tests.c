@@ -714,6 +714,35 @@ clone_sync(char *s)
   exit(0);
 }
 
+// tgkill：精确终止同组指定 tid，不影响父线程。
+void
+clone_tgkill(char *s)
+{
+  int parent_tgid = getpid();
+  char *stack = sbrk(PGSIZE);
+  int pid, status;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(group_worker, 0, stack + PGSIZE);
+  if(pid < 0 || tgkill(parent_tgid, pid, 9) < 0){
+    printf("%s: tgkill failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, &status) != pid){
+    printf("%s: tgkill wait failed\n", s);
+    exit(1);
+  }
+  if(getpid() != parent_tgid){
+    printf("%s: parent thread was killed\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
 // TLS：每个 clone 线程拥有独立的 tp 指针。
 void
 clone_tls(char *s)
@@ -962,6 +991,7 @@ struct test proc_quicktests[] = {
   {clone_cwd, "clone_cwd"},
   {clone_join, "clone_join"},
   {clone_tls, "clone_tls"},
+  {clone_tgkill, "clone_tgkill"},
   {clone_group_exit, "clone_group_exit"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},

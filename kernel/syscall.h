@@ -58,3 +58,4 @@
 #define SYS_waitpid 55
 #define SYS_set_tls 56
 #define SYS_get_tls 57
+#define SYS_tgkill 58

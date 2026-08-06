@@ -62,6 +62,7 @@
   X(SYS_gettid, gettid) \
   X(SYS_waitpid, waitpid) \
   X(SYS_set_tls, set_tls) \
-  X(SYS_get_tls, get_tls)
+  X(SYS_get_tls, get_tls) \
+  X(SYS_tgkill, tgkill)
 
 #endif

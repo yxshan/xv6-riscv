@@ -736,6 +736,31 @@ usertests clone_tls
 make test-quick
 ```
 
+## P3 批次十二：tgkill
+
+状态：已完成
+
+完成内容：
+
+- 新增 `tgkill(tgid, tid, sig)` 系统调用，精确终止线程组内指定 tid。
+- `sig == 0` 时只做存在性检查，不发送信号。
+- 新增 `clone_tgkill` 回归测试：只终止指定工作线程，父线程继续运行。
+
+涉及文件：
+
+- `kernel/proc.c`、`kernel/sysproc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/defs.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_tgkill
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

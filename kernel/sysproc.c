@@ -237,6 +237,17 @@ sys_kill(void)
   return kkill(pid);
 }
 
+uint64
+sys_tgkill(void)
+{
+  int tgid, tid, sig;
+
+  argint(0, &tgid);
+  argint(1, &tid);
+  argint(2, &sig);
+  return ktgkill(tgid, tid, sig);
+}
+
 // 返回系统启动以来的时钟节拍数。
 uint64
 sys_uptime(void)
