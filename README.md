@@ -41,6 +41,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 内核线程：`kthread_create` 复用进程表与 MLFQ 调度器，内核态执行后自动退出
 - 线程组语义：`getpid()` 返回 tgid，`gettid()` 返回 tid，clone 线程共享 tgid
 - clone 共享文件表与 cwd：子线程 close/chdir 对同组线程可见
+- 线程组退出：组长退出或按 tgid kill 时终止并回收同组线程
 
 ## 目录结构
 

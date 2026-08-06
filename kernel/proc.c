@@ -522,6 +522,45 @@ reparent(struct proc *p)
   }
 }
 
+// 线程组组长退出时，终止并回收同 tgid 的其余线程。
+// 调用者必须是组组长（tgid == pid），且尚未释放共享资源。
+static void
+thread_group_exit(struct proc *p)
+{
+  struct proc *q;
+
+  // 先标记所有兄弟线程 killed，并唤醒睡眠中的线程。
+  for(q = proc; q < &proc[NPROC]; q++){
+    if(q == p || q->tgid != p->tgid || q->state == UNUSED)
+      continue;
+    acquire(&q->lock);
+    if(q->state != UNUSED){
+      q->killed = 1;
+      if(q->state == SLEEPING)
+        q->state = RUNNABLE;
+    }
+    release(&q->lock);
+  }
+
+  // 逐个等待兄弟线程进入 ZOMBIE 并回收，避免共享页表提前释放。
+  for(q = proc; q < &proc[NPROC]; q++){
+    if(q == p || q->tgid != p->tgid || q->state == UNUSED)
+      continue;
+    acquire(&wait_lock);
+    for(;;){
+      acquire(&q->lock);
+      if(q->state == ZOMBIE){
+        freeproc(q);
+        release(&q->lock);
+        break;
+      }
+      release(&q->lock);
+      sleep(p, &wait_lock);
+    }
+    release(&wait_lock);
+  }
+}
+
 // 当前进程退出，函数不会返回。
 // 退出后进程进入 ZOMBIE 状态，保留 pid 和退出状态，
 // 直到父进程调用 wait() 回收资源。
@@ -532,6 +571,10 @@ kexit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  // 组长退出即整个线程组退出。
+  if(p->tgid == p->pid)
+    thread_group_exit(p);
 
   // 最后一个线程/进程退出时关闭共享文件表与 cwd。
   proc_files_release(p->files);
@@ -941,21 +984,21 @@ int
 kkill(int pid)
 {
   struct proc *p;
+  int found = 0;
 
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
-    if(p->pid == pid){
+    if(p->state != UNUSED && (p->pid == pid || p->tgid == pid)){
       p->killed = 1;
       if(p->state == SLEEPING){
         // 被 kill 的睡眠进程也要唤醒，让它有机会检查 killed。
         p->state = RUNNABLE;
       }
-      release(&p->lock);
-      return 0;
+      found = 1;
     }
     release(&p->lock);
   }
-  return -1;
+  return found ? 0 : -1;
 }
 
 void

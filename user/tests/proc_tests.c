@@ -596,6 +596,13 @@ static int tgid_child_pid;
 static int tgid_child_tid;
 static int shared_fd;
 
+static void
+group_worker(void *arg)
+{
+  for(;;)
+    pause(1000);
+}
+
 static inline int
 sync_atomic_swap(int *p, int v)
 {
@@ -682,6 +689,35 @@ clone_sync(char *s)
     exit(1);
   }
   sbrk(-2 * PGSIZE);
+  exit(0);
+}
+
+// 线程组退出：组长 exit 时同 tgid 的线程也应被终止并回收。
+void
+clone_group_exit(char *s)
+{
+  uint64 before = module_call(KMOD_SYSINFO, SYSINFO_CMD_PROC, 0, 0);
+  int pid = fork();
+  int status;
+
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    char *stack = sbrk(PGSIZE);
+    if(stack == SBRK_ERROR || thread_create(group_worker, 0, stack + PGSIZE) < 0)
+      exit(1);
+    exit(0);
+  }
+  if(wait(&status) != pid || status != 0){
+    printf("%s: group leader wait failed\n", s);
+    exit(1);
+  }
+  if(module_call(KMOD_SYSINFO, SYSINFO_CMD_PROC, 0, 0) > before){
+    printf("%s: group threads not reclaimed\n", s);
+    exit(1);
+  }
   exit(0);
 }
 
@@ -837,6 +873,7 @@ struct test proc_quicktests[] = {
   {clone_tgid, "clone_tgid"},
   {clone_files, "clone_files"},
   {clone_cwd, "clone_cwd"},
+  {clone_group_exit, "clone_group_exit"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},
   {exitwait, "exitwait"},

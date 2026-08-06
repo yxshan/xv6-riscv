@@ -246,6 +246,10 @@ P3 批次八新增回归用例：
 - `clone_files`：子线程 close 共享 fd 后，父进程同一 fd 失效。
 - `clone_cwd`：子线程 chdir 后，父进程相对路径随之改变。
 
+P3 批次九新增回归用例：
+
+- `clone_group_exit`：组长 exit 时同 tgid 线程被终止并回收，进程数恢复。
+
 工具测试新增：
 
 - `swapinfo`：显示交换盘总页数、空闲页数和换入换出计数。

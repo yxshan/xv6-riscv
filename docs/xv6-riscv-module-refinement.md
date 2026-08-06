@@ -663,6 +663,30 @@ usertests clone_cwd
 make test-quick
 ```
 
+## P3 批次九：线程组退出与 tgid kill
+
+状态：已完成
+
+完成内容：
+
+- `kkill()` 同时匹配 pid 和 tgid：按线程组 ID 可终止整个线程组。
+- 线程组组长退出时先终止并回收同 tgid 的兄弟线程，再释放共享页表与文件表。
+- 组长等待兄弟线程进入 ZOMBIE 后统一 `freeproc`，避免共享地址空间提前释放。
+- 新增 `clone_group_exit` 回归测试，通过 `sysinfo` 进程数验证线程被回收。
+
+涉及文件：
+
+- `kernel/proc.c`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_group_exit
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)
