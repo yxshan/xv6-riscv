@@ -417,6 +417,48 @@ modunload 0
 modunload 1
 ```
 
+## P3 批次一：VFS 挂载表与双重间接块
+
+状态：已完成
+
+完成内容：
+
+- 新增独立 VFS 挂载层 `kernel/mount.c`，挂载表按设备、挂载点和路径登记。
+- 路径解析经过挂载点时切换到被挂载文件系统的根；挂载根执行 `..` 会跨回父文件系统。
+- 新增 `mount` / `umount` 系统调用、用户库桩和命令行工具。
+- `mkfs` 只在根镜像创建 `/disk1` 目录，内核启动时把第二磁盘默认挂载到该目录。
+- 卸载按挂载路径精确匹配；同一设备同一时刻只允许一个挂载点，避免共享根 inode 的 `..` 语义歧义。
+- 磁盘 inode 增加二级间接块地址，单文件上限从 268KB 扩展到约 64MB。
+- `bmap`、`itrunc` 和 `mkfs` 同步支持二级间接块分配与释放。
+- 新增 `mount_basic`、`mount_dotdot`、`dindirect` 回归测试。
+- `test-xv6.py` 增加挂载工具测试，并修复旧输出重复匹配与镜像缓存污染问题。
+
+涉及文件：
+
+- `kernel/mount.c`、`kernel/defs.h`
+- `kernel/fs.c`、`kernel/fs.h`、`kernel/file.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/main.c`、`kernel/proc.c`
+- `mkfs/mkfs.c`、`Makefile`
+- `user/mount.c`、`user/umount.c`、`user/user.h`、`user/usys.pl`
+- `user/tests/fs_tests.c`、`test-xv6.py`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img fs2.img
+usertests mount_basic
+usertests mount_dotdot
+usertests dindirect
+mkdir /mnt
+mount 2 /mnt
+ls /mnt
+echo MNT-OK > /mnt/mntfile
+cat /mnt/mntfile
+umount /mnt
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

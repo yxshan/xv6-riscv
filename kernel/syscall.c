@@ -133,6 +133,8 @@ extern uint64 sys_setgid(void);
 extern uint64 sys_umask(void);
 extern uint64 sys_mmap(void);
 extern uint64 sys_munmap(void);
+extern uint64 sys_mount(void);
+extern uint64 sys_umount(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -183,6 +185,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_umask] sys_umask,
 [SYS_mmap] sys_mmap,
 [SYS_munmap] sys_munmap,
+[SYS_mount] sys_mount,
+[SYS_umount] sys_umount,
 };
 
 void

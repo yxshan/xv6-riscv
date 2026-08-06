@@ -25,6 +25,7 @@ OBJS = \
   $K/sysproc.o \
   $K/bio.o \
   $K/fs.o \
+  $K/mount.o \
   $K/log.o \
   $K/sleeplock.o \
   $K/file.o \
@@ -213,10 +214,12 @@ UPROGS=\
 	$U/_chmod\
 	$U/_chown\
 	$U/_permexec\
+	$U/_mount\
+	$U/_umount\
 	$(UMOD_BINS)\
 
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
-	mkfs/mkfs fs.img README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
+	mkfs/mkfs -disk1 fs.img README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
 
 fs2.img: mkfs/mkfs README.md $U/_echo
 	mkfs/mkfs fs2.img README.md $U/_echo

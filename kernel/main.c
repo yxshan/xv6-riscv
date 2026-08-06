@@ -30,6 +30,7 @@ main()
     plicinithart();  // 允许当前 CPU 接收设备中断
     binit();         // 初始化块缓存，所有磁盘块读写先经过缓存
     iinit();         // 初始化 inode 缓存表
+    mountinit();     // 初始化 VFS 挂载表锁
     fileinit();      // 初始化打开文件表
     virtio_disk_init(); // 初始化 QEMU 模拟的 virtio 磁盘
     userinit();      // 创建第一个用户进程 init

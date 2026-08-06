@@ -35,7 +35,7 @@ struct inode {
   ushort gid;         // Owner group ID
   short nlink;
   uint size;
-  uint addrs[NDIRECT+1];
+  uint addrs[NDIRECT+2];
   struct pipe *fifo;  // T_FIFO: in-memory named pipe object
 };
 

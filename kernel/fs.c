@@ -55,6 +55,15 @@ fsinit(int dev) {
   ireclaim(dev);
 }
 
+// 判断设备是否已完成文件系统初始化，供挂载层校验设备号。
+int
+fsvalid(int dev)
+{
+  if(dev < ROOTDEV || dev >= ROOTDEV + NDISK)
+    return 0;
+  return sb[dev].magic == FSMAGIC;
+}
+
 // 把一个磁盘块清零。
 static void
 bzero(int dev, int bno)
@@ -205,7 +214,7 @@ iinit()
   }
 }
 
-static struct inode* iget(uint dev, uint inum);
+struct inode* iget(uint dev, uint inum);
 
 // 在磁盘上分配一个 inode：把磁盘 inode 的 type 设为非 0，
 // 并返回一个已引用但未加锁的内存 inode。
@@ -259,7 +268,7 @@ iupdate(struct inode *ip)
 
 // 在 inode 表中查找或创建 inum 对应的内存 inode，并增加引用计数。
 // 不加锁、不读磁盘；返回的 inode 需要 ilock() 后使用。
-static struct inode*
+struct inode*
 iget(uint dev, uint inum)
 {
   struct inode *ip, *empty;
@@ -456,6 +465,44 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  bn -= NINDIRECT;
+
+  if(bn < NINDIRECT2){
+    // 二级间接块：先经过一级索引块，再经过二级索引块。
+    uint idx1 = bn / NINDIRECT;
+    uint idx2 = bn % NINDIRECT;
+
+    if((addr = ip->addrs[NDIRECT+1]) == 0){
+      addr = balloc(ip->dev);
+      if(addr == 0)
+        return 0;
+      ip->addrs[NDIRECT+1] = addr;
+    }
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[idx1]) == 0){
+      addr = balloc(ip->dev);
+      if(addr){
+        a[idx1] = addr;
+        log_write(bp);
+      }
+    }
+    brelse(bp);
+    if(addr == 0)
+      return 0;
+
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[idx2]) == 0){
+      addr = balloc(ip->dev);
+      if(addr){
+        a[idx2] = addr;
+        log_write(bp);
+      }
+    }
+    brelse(bp);
+    return addr;
+  }
 
   panic("bmap: out of range");
 }
@@ -485,6 +532,26 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT+1]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    a = (uint*)bp->data;
+    for(i = 0; i < NINDIRECT; i++){
+      if(a[i]){
+        struct buf *bp2 = bread(ip->dev, a[i]);
+        uint *b = (uint*)bp2->data;
+        for(j = 0; j < NINDIRECT; j++){
+          if(b[j])
+            bfree(ip->dev, b[j]);
+        }
+        brelse(bp2);
+        bfree(ip->dev, a[i]);
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
   }
 
   ip->size = 0;
@@ -701,19 +768,6 @@ skipelem(char *path, char *name)
   return path;
 }
 
-// 简单的只读挂载：/disk1 前缀映射到第二块磁盘的根 inode。
-// 返回设备号，并把 *rest 调整为挂载点之后的路径。
-static int
-mount_root(char *path, char **rest)
-{
-  if(strncmp(path, "/disk1", 6) == 0 && (path[6] == 0 || path[6] == '/')){
-    *rest = path + 6;
-    return DISK1DEV;
-  }
-  *rest = path;
-  return ROOTDEV;
-}
-
 // 解析路径并返回对应 inode。
 // nameiparent 非 0 时返回父目录 inode，并把最后一段路径元素
 // 复制到 name（至少 DIRSIZ 字节）。
@@ -723,37 +777,53 @@ namex(char *path, int nameiparent, char *name)
 {
   struct inode *ip, *next;
   int depth = 0;
-  int dev;
-  char *mntpath;
 
-  dev = mount_root(path, &mntpath);
-  path = mntpath;
+  // 挂载锁在整个路径解析期间持有，保证 mount/umount 不会与路径穿越竞争。
+  mount_acquire();
 
   // 绝对路径从根 inode 开始，相对路径从当前目录开始。
-  if(*path == '/' || dev != ROOTDEV)
-    ip = iget(dev, ROOTINO);
+  if(*path == '/')
+    ip = iget(ROOTDEV, ROOTINO);
   else
     ip = idup(myproc()->cwd);
 
   while((path = skipelem(path, name)) != 0){
+    // 上一步解析到的可能是挂载点，先切换到被挂载文件系统的根。
+    mount_enter(&ip);
     ilock(ip);
     // 路径中间元素必须是目录，否则解析失败。
     if(ip->type != T_DIR){
       iunlockput(ip);
+      mount_release();
       return 0;
     }
     // 遍历目录必须拥有执行权限，否则拒绝继续解析路径。
     if(iaccess(ip, 1) < 0){
       iunlockput(ip);
+      mount_release();
       return 0;
     }
     if(nameiparent && *path == '\0'){
       // nameiparent 模式：在最后一级之前停下，返回父目录。
       iunlock(ip);
+      mount_release();
       return ip;
+    }
+    if(namecmp(name, "..") == 0){
+      struct inode *parent;
+      int r = mount_dotdot(ip, &parent);
+      if(r < 0){
+        mount_release();
+        return 0;
+      }
+      if(r > 0){
+        ip = parent;
+        continue;
+      }
     }
     if((next = dirlookup(ip, name, 0)) == 0){
       iunlockput(ip);
+      mount_release();
       return 0;
     }
     // 先释放父目录，再锁子目录，避免 "." / ".." 等自引用目录死锁。
@@ -768,6 +838,7 @@ namex(char *path, int nameiparent, char *name)
       if(readi(next, 0, (uint64)target, 0, n) != n){
         iunlockput(next);
         iput(ip);
+        mount_release();
         return 0;
       }
       target[n] = 0;
@@ -775,15 +846,15 @@ namex(char *path, int nameiparent, char *name)
 
       if(++depth > 8){
         iput(ip);
+        mount_release();
         return 0;
       }
 
       if(target[0] == '/'){
-        // 绝对符号链接：从对应磁盘根目录重新解析。
+        // 绝对符号链接：从全局根目录重新解析，挂载点由 mount_enter 处理。
         iput(ip);
-        dev = mount_root(target, &mntpath);
-        ip = iget(dev, ROOTINO);
-        path = mntpath;
+        ip = iget(ROOTDEV, ROOTINO);
+        path = target;
       } else {
         // 相对符号链接：继续从当前目录解析，ip 已解锁。
         path = target;
@@ -794,10 +865,14 @@ namex(char *path, int nameiparent, char *name)
     iput(ip);
     ip = next;
   }
+  // 路径最后一级也可能是挂载点，需要把挂载根作为最终结果。
+  mount_enter(&ip);
   if(nameiparent){
     iput(ip);
+    mount_release();
     return 0;
   }
+  mount_release();
   return ip;
 }
 

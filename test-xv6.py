@@ -21,6 +21,10 @@ args = parser.parse_args()
 _active_qemus = []
 
 def _build_once():
+    # 强制重建镜像，避免上次运行遗留的文件污染“干净”缓存。
+    for f in ("fs.img", "fs2.img"):
+        if os.path.exists(f):
+            os.remove(f)
     run(["make", "kernel/kernel", "fs.img", "fs2.img"], check=True)
     shutil.copyfile("fs.img", "fs.img.clean")
     shutil.copyfile("fs2.img", "fs2.img.clean")
@@ -65,7 +69,8 @@ class QEMU(object):
                                       start_new_session=True)
         _active_qemus.append(self)
         self.output = ""
-        self.outbytes = bytearray()       
+        self.outbytes = bytearray()
+        self.offset = 0
         time.sleep(1)
 
     def reset_fs(self):
@@ -122,12 +127,15 @@ class QEMU(object):
         sys.exit(1)
 
     def match(self, *regexps, exit=True):
-        lines = self.lines()
+        all_lines = self.lines()
+        lines = all_lines[self.offset:]
         last = -1
         for i, line in enumerate(lines):
             if any(re.match(r, line) for r in regexps):
                 print(line)
                 last = i
+        if last >= 0:
+            self.offset += last + 1
         if last == -1 and exit:
             self.error()
         l = ""
@@ -290,6 +298,14 @@ def test_tools():
     q.cmd("echo WROTE-OK > /disk1/newfile\ncat /disk1/newfile\n")
     q.monitor(".*WROTE-OK", timeout=60)
     q.cmd("rm /disk1/newfile\n")
+    q.cmd("umount /disk1\nmkdir /mnt\nmount 2 /mnt\nls /mnt\n")
+    q.monitor("^echo ", timeout=60)
+    q.cmd("echo MNT-OK > /mnt/mntfile\ncat /mnt/mntfile\n")
+    q.monitor("^\\$ MNT-OK$|^MNT-OK$", timeout=60)
+    q.cmd("umount /mnt\n")
+    q.monitor("^\\$ umount\\(/mnt\\) = 0|^umount\\(/mnt\\) = 0", timeout=60)
+    q.cmd("mount 2 /disk1\n")
+    q.monitor("^\\$ mount\\(2, /disk1\\) = 0|^mount\\(2, /disk1\\) = 0", timeout=60)
     q.stop()
     print("OK")
 

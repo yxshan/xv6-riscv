@@ -47,3 +47,5 @@
 #define SYS_umask 44
 #define SYS_mmap 45
 #define SYS_munmap 46
+#define SYS_mount 47
+#define SYS_umount 48

@@ -211,6 +211,16 @@ P2 批次四新增回归用例：
 - `ls /disk1` 与 `cat /disk1/README.md` 验证第二磁盘挂载。
 - `echo WROTE-OK > /disk1/newfile` 验证第二磁盘写操作。
 
+P3 批次一新增回归用例：
+
+- `mount_basic`：把第二磁盘挂到任意目录，写入、读取、卸载并确认挂载树消失。
+- `mount_dotdot`：挂载根目录执行 `..` 时跨回父文件系统，而不是停在挂载根。
+- `dindirect`：写入并读回超过单间接块上限的文件，覆盖双重间接块和截断释放。
+
+工具测试新增：
+
+- `mkdir /mnt`、`mount 2 /mnt`、`ls /mnt`、`echo MNT-OK > /mnt/mntfile`、`cat /mnt/mntfile`、`umount /mnt`。
+
 内核自测：
 
 - `SELFTEST_CMD_BASIC`：进程状态、MLFQ 队列、优先级和内存可用性。

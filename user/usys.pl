@@ -71,3 +71,5 @@ entry("setgid");
 entry("umask");
 entry("mmap");
 entry("munmap");
+entry("mount");
+entry("umount");

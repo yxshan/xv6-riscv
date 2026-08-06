@@ -32,6 +32,8 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 文件权限与用户/组：`chmod` / `chown` / `setuid` / `setgid` / `umask`
 - 需求分页与 `mmap`：支持 `MAP_PRIVATE` / `MAP_SHARED`、部分 `munmap` 与共享写回
 - 多磁盘支持：第二块 virtio 磁盘以 `/disk1` 挂载，可读可写
+- VFS 挂载表：`mount` / `umount` 支持把第二磁盘挂到任意目录，`/disk1` 为默认挂载点，同一设备同一时刻一个挂载点
+- 双重间接块：单文件上限从 268KB 扩展到约 64MB
 
 ## 目录结构
 
@@ -150,6 +152,17 @@ $ echo disk1 > /disk1/newfile
 $ cat /disk1/newfile
 disk1
 $ rm /disk1/newfile
+
+$ mkdir /mnt
+$ mount 2 /mnt
+mount(2, /mnt) = 0
+$ ls /mnt
+.
+..
+README.md
+echo
+$ umount /mnt
+umount(/mnt) = 0
 
 $ crashdump
 === kernel crash dump ===

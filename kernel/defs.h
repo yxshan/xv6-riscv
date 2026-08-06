@@ -42,6 +42,7 @@ int             filewrite(struct file*, uint64, int n);
 void            fsinit(int);
 int             dirlink(struct inode*, char*, uint);
 struct inode*   dirlookup(struct inode*, char*, uint*);
+struct inode*   iget(uint, uint);
 struct inode*   ialloc(uint, short);
 struct inode*   idup(struct inode*);
 void            iinit();
@@ -59,6 +60,19 @@ int             writei(struct inode*, int, uint64, uint, uint);
 void            itrunc(struct inode*);
 void            ireclaim(int);
 int             iaccess(struct inode*, int);
+int             fsvalid(int);
+
+// mount.c
+void            mountinit(void);
+void            mount_acquire(void);
+void            mount_release(void);
+int             mount_enter(struct inode**);
+int             mount_dotdot(struct inode*, struct inode**);
+int             mount_add(int, struct inode*, char*);
+int             mount_remove(char*);
+void            mount_default(void);
+uint64          sys_mount(void);
+uint64          sys_umount(void);
 
 // kalloc.c
 void*           kalloc(void);
