@@ -114,6 +114,7 @@ uint64          sys_sigreturn(void);
 void            kexit(int);
 int             kfork(void);
 int             kclone(uint64, uint64, uint64, uint64);
+int             kthread_create(void (*)(void*), void*);
 int             growproc(int);
 void            proc_mapstacks(pagetable_t);
 pagetable_t     proc_pagetable(struct proc *);

@@ -435,6 +435,29 @@ dynmod_badelf(char *s)
   exit(0);
 }
 
+// 内核线程：通过 selftest 模块创建，用户态 wait 回收并检查执行计数。
+void
+kernel_kthread(char *s)
+{
+  uint64 pid;
+  int status;
+
+  pid = module_call(KMOD_SELFTEST, SELFTEST_CMD_KTHREAD, 0, 0);
+  if(pid == (uint64)-1){
+    printf("%s: kthread create failed\n", s);
+    exit(1);
+  }
+  if(wait(&status) != (int)pid || status != 0){
+    printf("%s: kthread wait failed\n", s);
+    exit(1);
+  }
+  if(module_call(KMOD_SELFTEST, SELFTEST_CMD_KTHREAD_COUNT, 0, 0) != 1){
+    printf("%s: kthread did not run\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 // 内核自测模块应能验证进程表与内存基本不变量。
 void
 kernel_selftest(char *s)
@@ -468,6 +491,7 @@ struct test module_quicktests[] = {
   {dynmod_lifecycle, "dynmod_lifecycle"},
   {dynmod_multi, "dynmod_multi"},
   {dynmod_badelf, "dynmod_badelf"},
+  {kernel_kthread, "kernel_kthread"},
   {kernel_selftest, "kernel_selftest"},
   { 0, 0},
 };

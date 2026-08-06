@@ -583,6 +583,34 @@ usertests clone_sync
 make test-quick
 ```
 
+## P3 批次六：内核线程
+
+状态：已完成
+
+完成内容：
+
+- 新增 `kthread_create()`，复用 `proc` 表和 MLFQ 调度器创建内核线程。
+- 内核线程不分配用户页表与 trapframe，只使用固定内核栈和上下文。
+- 首次调度进入 `kthreadret()`，先释放调度器持有的 `p->lock`，再执行 `fn(arg)`。
+- 内核线程函数返回后自动调用 `kexit(0)`，父进程可通过 `wait` 回收。
+- `kexit()` 兼容无 `cwd` 的内核线程。
+- selftest 模块新增 `SELFTEST_CMD_KTHREAD` 与 `SELFTEST_CMD_KTHREAD_COUNT`。
+- 新增 `kernel_kthread` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/defs.h`
+- `kernel/module/module_ids.h`、`kernel/modules/selftest.c`
+- `user/tests/module_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests kernel_kthread
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

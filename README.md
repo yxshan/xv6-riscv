@@ -38,6 +38,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - ASLR：`exec` 随机化用户栈起始位置，增强地址空间布局随机性
 - `clone` 轻量线程：共享父进程地址空间，使用独立用户栈、trapframe 与内核栈
 - `futex` 与 `thread_create`：用户态互斥同步、线程入口 stub 与 `gettid`
+- 内核线程：`kthread_create` 复用进程表与 MLFQ 调度器，内核态执行后自动退出
 
 ## 目录结构
 

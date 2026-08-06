@@ -233,6 +233,10 @@ P3 批次五新增回归用例：
 
 - `clone_sync`：两个 `thread_create` 线程通过 futex 互斥锁累加计数器，结果必须精确为 1000。
 
+P3 批次六新增回归用例：
+
+- `kernel_kthread`：通过 selftest 模块创建内核线程，用户态 `wait` 回收并检查执行计数。
+
 工具测试新增：
 
 - `swapinfo`：显示交换盘总页数、空闲页数和换入换出计数。

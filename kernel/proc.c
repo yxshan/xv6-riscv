@@ -147,6 +147,9 @@ found:
   p->priority = 50;
   p->qlevel = 0;
   p->qticks = 0;
+  p->is_kthread = 0;
+  p->kthread_fn = 0;
+  p->kthread_arg = 0;
   p->uid = 0;
   p->euid = 0;
   p->gid = 0;
@@ -196,6 +199,9 @@ freeproc(struct proc *p)
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
+  p->is_kthread = 0;
+  p->kthread_fn = 0;
+  p->kthread_arg = 0;
   p->parent = 0;
   p->name[0] = 0;
   p->chan = 0;
@@ -418,6 +424,76 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   return pid;
 }
 
+static void
+kthreadret(void)
+{
+  struct proc *p = myproc();
+  void (*fn)(void*) = (void (*)(void*))p->kthread_fn;
+  void *arg = (void*)p->kthread_arg;
+
+  // 与 forkret() 一样，首次调度进入时仍持有 p->lock。
+  release(&p->lock);
+  fn(arg);
+  kexit(0);
+}
+
+// 创建内核线程：复用 proc 表和调度器，但不分配用户页表/trapframe。
+// 内核线程从 kthreadret 开始执行 fn(arg)，返回后自动退出。
+int
+kthread_create(void (*fn)(void*), void *arg)
+{
+  struct proc *p;
+  int pid;
+
+  if(fn == 0)
+    return -1;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED){
+      release(&p->lock);
+      continue;
+    }
+    p->pid = allocpid();
+    p->priority = 50;
+    p->qlevel = 0;
+    p->qticks = 0;
+    p->is_kthread = 1;
+    p->kthread_fn = (uint64)fn;
+    p->kthread_arg = (uint64)arg;
+    p->uid = 0;
+    p->euid = 0;
+    p->gid = 0;
+    p->egid = 0;
+    p->umask = 022;
+    p->trapframe = 0;
+    p->pagetable = 0;
+    p->cwd = 0;
+    p->sz = 0;
+    memset(p->vmas, 0, sizeof(p->vmas));
+    p->sigpending = 0;
+    p->sigactive = 0;
+    memset(p->sighandlers, 0, sizeof(p->sighandlers));
+    p->state = USED;
+
+    memset(&p->context, 0, sizeof(p->context));
+    p->context.ra = (uint64)kthreadret;
+    p->context.sp = p->kstack + PGSIZE;
+    pid = p->pid;
+    release(&p->lock);
+
+    acquire(&wait_lock);
+    p->parent = myproc();
+    release(&wait_lock);
+
+    acquire(&p->lock);
+    p->state = RUNNABLE;
+    release(&p->lock);
+    return pid;
+  }
+  return -1;
+}
+
 // 进程退出时，把它的子进程重新托管给 init。
 // 调用者必须持有 wait_lock。
 void
@@ -453,10 +529,12 @@ kexit(int status)
     }
   }
 
-  begin_op();
-  iput(p->cwd);
-  end_op();
-  p->cwd = 0;
+  if(p->cwd){
+    begin_op();
+    iput(p->cwd);
+    end_op();
+    p->cwd = 0;
+  }
 
   vma_clear(p);
 

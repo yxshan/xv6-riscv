@@ -108,6 +108,9 @@ struct proc {
   int priority;                // 调度优先级，0 最高，255 最低
   int qlevel;                  // MLFQ 当前队列，0 最高
   int qticks;                  // 当前队列已运行 tick 数
+  int is_kthread;              // 是否为内核线程
+  uint64 kthread_fn;           // 内核线程入口函数
+  uint64 kthread_arg;          // 内核线程参数
   ushort uid;                  // 真实用户 ID
   ushort euid;                 // 有效用户 ID，权限检查使用
   ushort gid;                  // 真实组 ID
