@@ -84,3 +84,6 @@ entry("set_tls");
 entry("get_tls");
 entry("tgkill");
 entry("sigprocmask");
+entry("setpgid");
+entry("getpgid");
+entry("killpg");

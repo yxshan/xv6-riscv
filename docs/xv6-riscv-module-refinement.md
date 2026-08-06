@@ -827,6 +827,35 @@ usertests clone_tgkill
 make test-quick
 ```
 
+## P3-K1：进程组 API
+
+状态：已完成
+
+完成内容：
+
+- `struct proc` 增加 `pgid`，init 默认属于自身进程组，fork 继承父进程组，
+  clone 线程共享进程组。
+- 新增 `setpgid` / `getpgid` / `killpg` 系统调用。
+- `setpgid(pid, 0)` 为指定进程创建以自身 pid 为组长的新组；
+  父进程可以为尚未执行 `exec` 的子进程设置进程组。
+- `killpg` 按进程组投递信号，只影响目标组，调用者所在组不受影响。
+- 新增 `pgid_basic` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests pgid_basic
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

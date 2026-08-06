@@ -47,6 +47,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - `tgkill`：精确向线程组内指定 tid 发送终止信号
 - 线程组信号：clone 线程共享信号处理表，`tgkill` 精确投递，`sigprocmask` 支持信号阻塞
 - clone 共享 VMA 表：`mmap` / `munmap` 与需求分页页面对同组线程可见
+- 进程组：`setpgid` / `getpgid` / `killpg`，支持按进程组投递信号
 
 ## 目录结构
 
@@ -262,6 +263,7 @@ KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
 - [xv6-riscv-extension-ideas.md](docs/xv6-riscv-extension-ideas.md)：扩展思路
 - [xv6-riscv-module-architecture.md](docs/xv6-riscv-module-architecture.md)：模块架构
 - [xv6-riscv-module-priorities.md](docs/xv6-riscv-module-priorities.md)：模块方向与优先级
+- [xv6-riscv-kernel-completeness.md](docs/xv6-riscv-kernel-completeness.md)：内核完全体路线
 - [xv6-riscv-module-refinement.md](docs/xv6-riscv-module-refinement.md)：现有模块完善批次
 - [xv6-riscv-testing.md](docs/xv6-riscv-testing.md)：测试架构与指南
 - [AGENTS.md](AGENTS.md)：贡献者指南

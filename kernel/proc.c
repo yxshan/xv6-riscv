@@ -191,6 +191,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->tgid = 0;
+  p->pgid = 0;
   p->priority = 50;
   p->qlevel = 0;
   p->qticks = 0;
@@ -250,6 +251,7 @@ freeproc(struct proc *p)
   p->sz = 0;
   p->pid = 0;
   p->tgid = 0;
+  p->pgid = 0;
   p->is_kthread = 0;
   p->kthread_fn = 0;
   p->kthread_arg = 0;
@@ -320,6 +322,8 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
+  p->tgid = p->pid;
+  p->pgid = p->pid;
   
   p->files = proc_files_alloc();
   if(p->files == 0)
@@ -443,6 +447,7 @@ kfork(void)
 
   pid = np->pid;
   np->tgid = pid;
+  np->pgid = p->pgid;
 
   acquire(&wait_lock);
   np->parent = p;
@@ -516,6 +521,7 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   np->umask = p->umask;
 
   np->tgid = p->tgid;
+  np->pgid = p->pgid;
   pid = np->pid;
 
   acquire(&wait_lock);
@@ -562,11 +568,13 @@ kthread_create(void (*fn)(void*), void *arg)
     }
     p->pid = allocpid();
     p->tgid = 0;
+    p->pgid = 0;
     p->priority = 50;
     p->qlevel = 0;
     p->qticks = 0;
     p->is_kthread = 1;
     p->tgid = p->pid;
+    p->pgid = p->pid;
     p->kthread_fn = (uint64)fn;
     p->kthread_arg = (uint64)arg;
     p->uid = 0;
@@ -1074,6 +1082,109 @@ sys_sigprocmask(void)
   }
   p->sigblocked = nset & ~(1UL << SIGKILL);
   return 0;
+}
+
+// 设置进程组：pid 为 0 时表示当前进程；pgid 为 0 时新建以 pid 为组长的新组。
+uint64
+sys_setpgid(void)
+{
+  struct proc *p = myproc();
+  struct proc *target = p;
+  int pid, pgid, found = 0;
+
+  argint(0, &pid);
+  argint(1, &pgid);
+  if(pgid < 0)
+    return -1;
+  if(pid == 0)
+    pid = p->pid;
+
+  if(pid != p->pid){
+    acquire(&wait_lock);
+    for(struct proc *q = proc; q < &proc[NPROC]; q++){
+      if(q->state != UNUSED && q->pid == pid && q->parent == p){
+        target = q;
+        found = 1;
+        break;
+      }
+    }
+    release(&wait_lock);
+    if(!found)
+      return -1;
+  }
+
+  if(pgid == 0)
+    pgid = pid;
+  if(pgid != pid){
+    for(struct proc *q = proc; q < &proc[NPROC]; q++){
+      if(q->state != UNUSED && q->pid == pgid){
+        found = 1;
+        break;
+      }
+    }
+    if(!found)
+      return -1;
+  }
+
+  acquire(&target->lock);
+  target->pgid = pgid;
+  release(&target->lock);
+  return 0;
+}
+
+uint64
+sys_getpgid(void)
+{
+  struct proc *p = myproc();
+  int pid;
+
+  argint(0, &pid);
+  if(pid == 0)
+    pid = p->pid;
+  for(struct proc *q = proc; q < &proc[NPROC]; q++){
+    if(q->pid != pid)
+      continue;
+    acquire(&q->lock);
+    if(q->state != UNUSED){
+      int pgid = q->pgid;
+      release(&q->lock);
+      return pgid;
+    }
+    release(&q->lock);
+  }
+  return -1;
+}
+
+// 向整个进程组投递信号；sig == 0 时只检查进程组是否存在。
+int
+kkillpg(int pgrp, int sig)
+{
+  struct proc *p;
+  int found = 0;
+
+  if(pgrp <= 0 || sig < 0 || sig >= NSIG)
+    return -1;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    if(p->state == UNUSED || p->pid != p->tgid || p->pgid != pgrp)
+      continue;
+    found = 1;
+    if(sig == 0)
+      return 0;
+    if(ksigkill(p->pid, sig) < 0)
+      return -1;
+  }
+  return found ? 0 : -1;
+}
+
+uint64
+sys_killpg(void)
+{
+  int pgrp, sig;
+
+  argint(0, &pgrp);
+  argint(1, &sig);
+  return kkillpg(pgrp, sig);
 }
 
 // 周期性优先级提升：按进程静态优先级重新计算目标队列，

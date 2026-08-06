@@ -60,3 +60,6 @@
 #define SYS_get_tls 57
 #define SYS_tgkill 58
 #define SYS_sigprocmask 59
+#define SYS_setpgid 60
+#define SYS_getpgid 61
+#define SYS_killpg 62

@@ -146,6 +146,9 @@ extern uint64 sys_set_tls(void);
 extern uint64 sys_get_tls(void);
 extern uint64 sys_tgkill(void);
 extern uint64 sys_sigprocmask(void);
+extern uint64 sys_setpgid(void);
+extern uint64 sys_getpgid(void);
+extern uint64 sys_killpg(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -209,6 +212,9 @@ static uint64 (*syscalls[])(void) = {
 [SYS_get_tls] sys_get_tls,
 [SYS_tgkill] sys_tgkill,
 [SYS_sigprocmask] sys_sigprocmask,
+[SYS_setpgid] sys_setpgid,
+[SYS_getpgid] sys_getpgid,
+[SYS_killpg] sys_killpg,
 };
 
 void

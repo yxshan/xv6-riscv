@@ -64,6 +64,9 @@
   X(SYS_set_tls, set_tls) \
   X(SYS_get_tls, get_tls) \
   X(SYS_tgkill, tgkill) \
-  X(SYS_sigprocmask, sigprocmask)
+  X(SYS_sigprocmask, sigprocmask) \
+  X(SYS_setpgid, setpgid) \
+  X(SYS_getpgid, getpgid) \
+  X(SYS_killpg, killpg)
 
 #endif

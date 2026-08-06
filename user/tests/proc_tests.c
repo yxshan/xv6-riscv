@@ -3,6 +3,7 @@
 // 每个测试函数由 usertests 驱动在独立子进程中运行。
 #include "tests.h"
 #include "kernel/module/module_ids.h"
+#include "kernel/signal.h"
 
 void
 exectest(char *s)
@@ -1000,6 +1001,51 @@ clone_worker(void *arg)
   clone_shared = 0x1234;
 }
 
+// 进程组：子进程创建/加入新组，父进程可只向该组投递信号。
+void
+pgid_basic(char *s)
+{
+  int parent_pgid = getpgid(0);
+  int pid, st;
+
+  pid = fork();
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    if(setpgid(0, 0) < 0 || getpgid(0) != getpid())
+      exit(1);
+    pause(1000);
+    exit(0);
+  }
+  if(setpgid(pid, pid) < 0){
+    kill(pid);
+    wait(&st);
+    printf("%s: setpgid failed\n", s);
+    exit(1);
+  }
+  if(getpgid(pid) != pid){
+    printf("%s: child pgid %d != %d\n", s, getpgid(pid), pid);
+    kill(pid);
+    wait(&st);
+    exit(1);
+  }
+  if(killpg(pid, SIGKILL) < 0){
+    printf("%s: killpg failed\n", s);
+    exit(1);
+  }
+  if(wait(&st) != pid){
+    printf("%s: wait failed\n", s);
+    exit(1);
+  }
+  if(getpgid(0) != parent_pgid){
+    printf("%s: parent pgid changed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 // clone：新线程共享父进程地址空间，写入对父进程可见。
 void
 clone_basic(char *s)
@@ -1044,6 +1090,7 @@ struct test proc_quicktests[] = {
   {clone_tls, "clone_tls"},
   {clone_tgkill, "clone_tgkill"},
   {clone_group_exit, "clone_group_exit"},
+  {pgid_basic, "pgid_basic"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},
   {exitwait, "exitwait"},
