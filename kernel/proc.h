@@ -105,6 +105,7 @@ struct proc {
   int killed;                  // 非 0 表示已被 kill
   int xstate;                  // 退出状态，等待父进程 wait() 读取
   int pid;                     // Process ID
+  int tgid;                    // Thread group ID，普通进程等于 pid
   int priority;                // 调度优先级，0 最高，255 最低
   int qlevel;                  // MLFQ 当前队列，0 最高
   int qticks;                  // 当前队列已运行 tick 数

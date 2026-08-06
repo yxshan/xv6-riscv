@@ -24,8 +24,8 @@ sys_exit(void)
 uint64
 sys_getpid(void)
 {
-  // 直接从当前进程控制块读取 pid。
-  return myproc()->pid;
+  // getpid 返回线程组 ID；普通进程等于 pid。
+  return myproc()->tgid;
 }
 
 uint64

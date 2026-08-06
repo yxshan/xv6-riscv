@@ -592,6 +592,8 @@ static int sync_counter;
 static int sync_mutex;
 static int sync_tid;
 static int sync_workers;
+static int tgid_child_pid;
+static int tgid_child_tid;
 
 static inline int
 sync_atomic_swap(int *p, int v)
@@ -615,6 +617,13 @@ sync_worker(void *arg)
     sync_atomic_swap(&sync_mutex, 0);
     futex_wake((uint64)&sync_mutex, 1);
   }
+}
+
+static void
+tgid_worker(void *arg)
+{
+  tgid_child_pid = getpid();
+  tgid_child_tid = gettid();
 }
 
 // clone + futex：两个线程通过共享 mutex 保护计数器，最终结果必须无丢失更新。
@@ -662,6 +671,44 @@ clone_sync(char *s)
   exit(0);
 }
 
+// clone 线程共享 tgid：子线程 getpid() 等于父进程 tgid，gettid() 是新 tid。
+void
+clone_tgid(char *s)
+{
+  int parent_pid = getpid();
+  int parent_tid = gettid();
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  if(parent_pid != parent_tid){
+    printf("%s: normal process tgid mismatch\n", s);
+    exit(1);
+  }
+  pid = thread_create(tgid_worker, 0, stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(wait(0) != pid){
+    printf("%s: clone wait failed\n", s);
+    exit(1);
+  }
+  if(tgid_child_pid != parent_pid){
+    printf("%s: child tgid %d != parent %d\n", s, tgid_child_pid, parent_pid);
+    exit(1);
+  }
+  if(tgid_child_tid == parent_tid || tgid_child_tid == 0){
+    printf("%s: child tid not distinct\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
 static void
 clone_worker(void *arg)
 {
@@ -704,6 +751,7 @@ struct test proc_quicktests[] = {
   {pipe1, "pipe1"},
   {clone_basic, "clone_basic"},
   {clone_sync, "clone_sync"},
+  {clone_tgid, "clone_tgid"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},
   {exitwait, "exitwait"},

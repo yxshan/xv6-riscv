@@ -611,6 +611,31 @@ usertests kernel_kthread
 make test-quick
 ```
 
+## P3 批次七：线程组语义
+
+状态：已完成
+
+完成内容：
+
+- `struct proc` 增加 `tgid` 字段；普通进程 `tgid == pid`。
+- fork 子进程获得新 tgid；clone 线程继承父线程组 tgid。
+- 内核线程拥有独立 tgid。
+- `getpid()` 返回 tgid，`gettid()` 返回 tid。
+- 新增 `clone_tgid` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/sysproc.c`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_tgid
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

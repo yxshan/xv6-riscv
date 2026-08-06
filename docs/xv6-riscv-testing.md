@@ -237,6 +237,10 @@ P3 批次六新增回归用例：
 
 - `kernel_kthread`：通过 selftest 模块创建内核线程，用户态 `wait` 回收并检查执行计数。
 
+P3 批次七新增回归用例：
+
+- `clone_tgid`：clone 子线程的 `getpid()` 等于父进程 tgid，`gettid()` 是新 tid。
+
 工具测试新增：
 
 - `swapinfo`：显示交换盘总页数、空闲页数和换入换出计数。

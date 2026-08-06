@@ -144,6 +144,7 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+  p->tgid = 0;
   p->priority = 50;
   p->qlevel = 0;
   p->qticks = 0;
@@ -199,6 +200,7 @@ freeproc(struct proc *p)
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
+  p->tgid = 0;
   p->is_kthread = 0;
   p->kthread_fn = 0;
   p->kthread_arg = 0;
@@ -347,6 +349,7 @@ kfork(void)
   np->umask = p->umask;
 
   pid = np->pid;
+  np->tgid = pid;
 
   release(&np->lock);
 
@@ -409,6 +412,7 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   np->egid = p->egid;
   np->umask = p->umask;
 
+  np->tgid = p->tgid;
   pid = np->pid;
   release(&np->lock);
 
@@ -455,10 +459,12 @@ kthread_create(void (*fn)(void*), void *arg)
       continue;
     }
     p->pid = allocpid();
+    p->tgid = 0;
     p->priority = 50;
     p->qlevel = 0;
     p->qticks = 0;
     p->is_kthread = 1;
+    p->tgid = p->pid;
     p->kthread_fn = (uint64)fn;
     p->kthread_arg = (uint64)arg;
     p->uid = 0;
