@@ -395,7 +395,7 @@ sig_stop_cont(char *s)
     printf("%s: SIGSTOP failed\n", s);
     exit(1);
   }
-  if(waitpid(pid, &st) != pid || !WIFSTOPPED(st)){
+  if(waitpid(pid, &st) != pid || !XV6_WIFSTOPPED(st)){
     printf("%s: waitpid did not report stopped\n", s);
     exit(1);
   }

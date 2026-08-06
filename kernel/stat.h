@@ -45,5 +45,5 @@ struct stat {
 #define PERM_MASK 0777
 
 // wait/waitpid 状态编码：低 8 位为退出码；0x7f 表示子进程已停止。
-#define WSTOPPED 0x7f
-#define WIFSTOPPED(x) ((x) == WSTOPPED)
+#define XV6_WSTOPPED 0x7f
+#define XV6_WIFSTOPPED(x) ((x) == XV6_WSTOPPED)

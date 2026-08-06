@@ -750,7 +750,7 @@ kwait(uint64 addr)
           return pid;
         }
         if(pp->stopped){
-          int st = WSTOPPED;
+          int st = XV6_WSTOPPED;
           pid = pp->pid;
           if(addr != 0 &&
              copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0){
@@ -809,7 +809,7 @@ kwaitpid(int pid, uint64 addr)
           return xpid;
         }
         if(pp->stopped){
-          int st = WSTOPPED;
+          int st = XV6_WSTOPPED;
           if(addr != 0 &&
              copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0){
             release(&pp->lock);
