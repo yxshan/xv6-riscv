@@ -73,3 +73,5 @@ entry("mmap");
 entry("munmap");
 entry("mount");
 entry("umount");
+entry("swapout");
+entry("swapinfo");

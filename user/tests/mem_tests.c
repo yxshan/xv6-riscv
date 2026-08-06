@@ -2,6 +2,7 @@
 //
 // 每个测试函数由 usertests 驱动在独立子进程中运行。
 #include "tests.h"
+#include "kernel/swap.h"
 
 #define REGION_SZ (1024 * 1024 * 1024)
 
@@ -704,6 +705,49 @@ lazy_sbrk(char *s)
   exit(0);
 }
 
+// 交换空间：强制换出一页后仍能通过缺页换入并读到原数据。
+void
+swap_basic(char *s)
+{
+  struct swapinfo si;
+  char *p = sbrk(PGSIZE);
+
+  if(p == SBRK_ERROR){
+    printf("%s: sbrk failed\n", s);
+    exit(1);
+  }
+  p[0] = 0x5a;
+  p[PGSIZE - 1] = 0xa5;
+
+  if(swapout() < 0){
+    printf("%s: swapout failed\n", s);
+    exit(1);
+  }
+  if(swapinfo(&si) < 0 || si.swapouts == 0){
+    printf("%s: swapout not counted\n", s);
+    exit(1);
+  }
+  if(p[0] != 0x5a || p[PGSIZE - 1] != 0xa5){
+    printf("%s: swap in data mismatch\n", s);
+    exit(1);
+  }
+  if(swapinfo(&si) < 0 || si.swapins == 0){
+    printf("%s: swapin not counted\n", s);
+    exit(1);
+  }
+
+  // 再次换出验证第二次换入。
+  if(swapout() < 0){
+    printf("%s: second swapout failed\n", s);
+    exit(1);
+  }
+  if(p[0] != 0x5a || p[PGSIZE - 1] != 0xa5){
+    printf("%s: second swap in data mismatch\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 // FIFO O_RDWR：同一描述符可先写后读，阻塞读端也能被 O_RDWR 写端唤醒。
 
 struct test mem_quicktests[] = {
@@ -725,6 +769,7 @@ struct test mem_quicktests[] = {
   {lazy_unmap, "lazy_unmap"},
   {lazy_copy, "lazy_copy"},
   {lazy_sbrk, "lazy_sbrk"},
+  {swap_basic, "swap_basic"},
   { 0, 0},
 };
 struct test mem_slowtests[] = {

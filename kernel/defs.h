@@ -193,6 +193,17 @@ int             cow_add(uint64);
 void            cow_release(uint64);
 int             cow_handle(pagetable_t, uint64);
 int             cow_selftest(void);
+
+// swap.c
+void            swapinit(void);
+int             swap_write(uint64, int);
+int             swap_read(uint64, int);
+void            swap_free(int);
+uint64          swap_flags(int);
+int             swap_evict(void);
+uint64          sys_swapout(void);
+uint64          sys_swapinfo(void);
+
 void            module_notify_tick(void);
 void            module_notify_syscall_enter(int);
 void            module_notify_syscall_exit(int, uint64);

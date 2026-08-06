@@ -53,6 +53,8 @@
   X(SYS_mmap, mmap) \
   X(SYS_munmap, munmap) \
   X(SYS_mount, mount) \
-  X(SYS_umount, umount)
+  X(SYS_umount, umount) \
+  X(SYS_swapout, swapout) \
+  X(SYS_swapinfo, swapinfo)
 
 #endif

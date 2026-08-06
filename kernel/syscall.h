@@ -49,3 +49,5 @@
 #define SYS_munmap 46
 #define SYS_mount 47
 #define SYS_umount 48
+#define SYS_swapout 49
+#define SYS_swapinfo 50

@@ -3,7 +3,7 @@ ENTRY( module_entry )
 
 SECTIONS
 {
-  . = 0x80040000;
+  . = 0x80080000;
 
   .text : {
     KEEP(*(.text.entry))

@@ -221,6 +221,14 @@ P3 批次一新增回归用例：
 
 - `mkdir /mnt`、`mount 2 /mnt`、`ls /mnt`、`echo MNT-OK > /mnt/mntfile`、`cat /mnt/mntfile`、`umount /mnt`。
 
+P3 批次二新增回归用例：
+
+- `swap_basic`：强制换出一页后通过缺页换入，验证数据完整和 `swapouts` / `swapins` 计数。
+
+工具测试新增：
+
+- `swapinfo`：显示交换盘总页数、空闲页数和换入换出计数。
+
 内核自测：
 
 - `SELFTEST_CMD_BASIC`：进程状态、MLFQ 队列、优先级和内存可用性。

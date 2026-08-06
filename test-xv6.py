@@ -22,10 +22,10 @@ _active_qemus = []
 
 def _build_once():
     # 强制重建镜像，避免上次运行遗留的文件污染“干净”缓存。
-    for f in ("fs.img", "fs2.img"):
+    for f in ("fs.img", "fs2.img", "swap.img"):
         if os.path.exists(f):
             os.remove(f)
-    run(["make", "kernel/kernel", "fs.img", "fs2.img"], check=True)
+    run(["make", "kernel/kernel", "fs.img", "fs2.img", "swap.img"], check=True)
     shutil.copyfile("fs.img", "fs.img.clean")
     shutil.copyfile("fs2.img", "fs2.img.clean")
 
@@ -62,7 +62,9 @@ class QEMU(object):
              "-drive", "file=fs.img,if=none,format=raw,id=x0",
              "-device", "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
              "-drive", "file=fs2.img,if=none,format=raw,id=x1",
-             "-device", "virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1"]
+             "-device", "virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1",
+             "-drive", "file=swap.img,if=none,format=raw,id=x2",
+             "-device", "virtio-blk-device,drive=x2,bus=virtio-mmio-bus.2"]
         self.proc = subprocess.Popen(q, stdin=subprocess.PIPE,
                                       stdout=subprocess.PIPE,
                                       stderr=subprocess.STDOUT,
@@ -291,6 +293,8 @@ def test_tools():
     q.monitor("^pid .* ps", timeout=60)
     q.cmd("id\n")
     q.monitor("^\\$ uid=0 gid=0 euid=0 egid=0|^uid=0 gid=0 euid=0 egid=0", timeout=60)
+    q.cmd("swapinfo\n")
+    q.monitor("^swap total ", timeout=60)
     q.cmd("ls /disk1\n")
     q.monitor("^echo ", timeout=60)
     q.cmd("cat /disk1/README.md\n")

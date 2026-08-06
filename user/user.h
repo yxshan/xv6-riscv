@@ -1,6 +1,7 @@
 #define SBRK_ERROR ((char *)-1)
 
 struct stat;
+struct swapinfo;
 
 // system calls
 int fork(void);
@@ -51,6 +52,8 @@ char* mmap(char*, uint, int, int, int, uint);
 int munmap(char*, uint);
 int mount(int, const char*);
 int umount(const char*);
+int swapout(void);
+int swapinfo(struct swapinfo*);
 
 // ulib.c
 int stat(const char*, struct stat*);

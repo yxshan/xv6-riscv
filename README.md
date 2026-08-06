@@ -34,6 +34,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 多磁盘支持：第二块 virtio 磁盘以 `/disk1` 挂载，可读可写
 - VFS 挂载表：`mount` / `umount` 支持把第二磁盘挂到任意目录，`/disk1` 为默认挂载点，同一设备同一时刻一个挂载点
 - 双重间接块：单文件上限从 268KB 扩展到约 64MB
+- 交换空间：第三块原始交换盘，内存不足时换出、缺页自动换入，`swapinfo` 查看统计
 
 ## 目录结构
 
@@ -134,6 +135,9 @@ hello
 
 $ id
 uid=0 gid=0 euid=0 egid=0
+
+$ swapinfo
+swap total 2048 free 2048 swapouts 0 swapins 0
 
 $ echo hi > permfile
 $ chmod 600 permfile

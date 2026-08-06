@@ -459,6 +459,44 @@ umount /mnt
 make test-quick
 ```
 
+## P3 批次二：交换空间
+
+状态：已完成
+
+完成内容：
+
+- 新增第三块原始 virtio 交换盘 `swap.img`，不承载文件系统。
+- `swap.c` 管理 2048 个交换槽位，每页由 4 个 1KB 磁盘块组成。
+- 换出页使用两个 RSW 位组合作为 PTE 交换标记（`PTE_V=0` 且
+  `PTE_SHM|PTE_COW` 同时置位），PPN 字段记录交换槽号。
+- 原始页权限保存在交换槽元数据中，换入时恢复 R/W/X/U。
+- `swap_evict()` 在物理内存不足时从当前进程换出最高地址用户页，
+  COW 页先私有化再换出。
+- `vmfault()` 识别交换标记后从交换盘读回，并归还交换槽。
+- `uvmunmap()` / `uvmfree()` 释放换出页时自动回收交换槽。
+- fork 遇到换出页时读入一份独立物理副本，父进程保持换出状态。
+- 新增 `swapout` / `swapinfo` 系统调用、`swapinfo` 工具和 `swap_basic` 回归测试。
+- 内核 BSS 增长后，动态模块保留区上移到 `0x80080000`，避免模块加载覆盖内核数据。
+
+涉及文件：
+
+- `kernel/swap.c`、`kernel/swap.h`、`kernel/defs.h`
+- `kernel/vm.c`、`kernel/riscv.h`、`kernel/memlayout.h`
+- `kernel/param.h`、`kernel/plic.c`、`kernel/trap.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/main.c`、`Makefile`、`test-xv6.py`
+- `user/swapinfo.c`、`user/user.h`、`user/usys.pl`
+- `user/tests/mem_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img fs2.img swap.img
+usertests swap_basic
+swapinfo
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

@@ -25,6 +25,10 @@
 #define VIRTIO1 0x10002000
 #define VIRTIO1_IRQ 2
 
+// 第三个 virtio 块设备作为原始交换盘。
+#define VIRTIO2 0x10003000
+#define VIRTIO2_IRQ 3
+
 // PLIC 负责汇总外部设备中断并分发给各 hart。
 #define PLIC 0x0c000000L
 #define PLIC_PRIORITY (PLIC + 0x0)
@@ -41,7 +45,7 @@
 
 // 动态模块固定加载区域，位于内核 BSS 之后。
 // 该区域从物理页分配器中保留，避免与普通内核内存冲突。
-#define DYNMOD_BASE 0x80040000L
+#define DYNMOD_BASE 0x80080000L
 #define DYNMOD_SIZE (8*4096)
 #define DYNMOD_NUM 4
 #define DYNMOD_AREA_SIZE (DYNMOD_SIZE * DYNMOD_NUM)
