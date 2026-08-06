@@ -14,5 +14,7 @@
 #define SIGKILL 9
 #define SIGUSR1 10
 #define SIGUSR2 12
+#define SIGSTOP 17
+#define SIGCONT 18
 
 #endif

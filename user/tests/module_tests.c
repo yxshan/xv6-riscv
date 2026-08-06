@@ -351,6 +351,71 @@ clone_sig_worker(void *arg)
     pause(1);
 }
 
+// SIGSTOP / SIGCONT：子进程停止后 waitpid 返回停止状态，继续后可正常退出。
+void
+sig_stop_cont(char *s)
+{
+  int *shared = (int*)mmap(0, PGSIZE, PROT_READ|PROT_WRITE,
+                           MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+  int pid, st;
+
+  if(shared == (int*)MAP_FAILED){
+    printf("%s: mmap failed\n", s);
+    exit(1);
+  }
+  shared[0] = 0;
+  shared[1] = 0;
+  shared[2] = 0;
+  pid = fork();
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    if(setpgid(0, 0) < 0)
+      exit(1);
+    shared[1] = 1;
+    while(shared[2] == 0)
+      pause(1);
+    exit(0);
+  }
+  if(setpgid(pid, pid) < 0){
+    kill(pid);
+    wait(&st);
+    printf("%s: setpgid failed\n", s);
+    exit(1);
+  }
+  for(int i = 0; i < 100 && shared[1] == 0; i++)
+    pause(1);
+  if(shared[1] == 0){
+    printf("%s: child not ready\n", s);
+    exit(1);
+  }
+  if(killpg(pid, SIGSTOP) < 0){
+    printf("%s: SIGSTOP failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, &st) != pid || !WIFSTOPPED(st)){
+    printf("%s: waitpid did not report stopped\n", s);
+    exit(1);
+  }
+  pause(5);
+  shared[2] = 1;
+  if(killpg(pid, SIGCONT) < 0){
+    printf("%s: SIGCONT failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, &st) != pid){
+    printf("%s: waitpid after cont failed\n", s);
+    exit(1);
+  }
+  if(munmap((char*)shared, PGSIZE) < 0){
+    printf("%s: munmap failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 // clone 线程共享信号处理表：tgkill 精确投递后子线程执行处理器。
 void
 clone_signal(char *s)
@@ -587,6 +652,7 @@ struct test module_quicktests[] = {
   {signal_no_reenter, "signal_no_reenter"},
   {signal_ignore, "signal_ignore"},
   {signal_default, "signal_default"},
+  {sig_stop_cont, "sig_stop_cont"},
   {sig_mask, "sig_mask"},
   {clone_signal, "clone_signal"},
   {dynmod_lifecycle, "dynmod_lifecycle"},

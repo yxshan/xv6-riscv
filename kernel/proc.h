@@ -130,6 +130,7 @@ struct proc {
   enum procstate state;        // Process state
   void *chan;                  // 非 0 时表示正在等待的唤醒通道
   int killed;                  // 非 0 表示已被 kill
+  int stopped;                 // 非 0 表示已被 SIGSTOP 停止
   int xstate;                  // 退出状态，等待父进程 wait() 读取
   int pid;                     // Process ID
   int tgid;                    // Thread group ID，普通进程等于 pid

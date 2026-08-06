@@ -856,6 +856,32 @@ usertests pgid_basic
 make test-quick
 ```
 
+## P3-K2a：SIGSTOP / SIGCONT 与 waitpid 停止状态
+
+状态：已完成
+
+完成内容：
+
+- `struct proc` 增加 `stopped` 状态，调度器跳过已停止进程。
+- `killpg` 支持向整个进程组投递 `SIGSTOP` / `SIGCONT`。
+- `wait` / `waitpid` 对已停止子进程返回 `WSTOPPED` 状态，但不回收 PCB。
+- `SIGKILL`、`kkill` 和线程组退出会清除停止状态，避免停止线程阻止组回收。
+- 新增 `sig_stop_cont` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/signal.h`、`kernel/stat.h`
+- `user/tests/module_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests sig_stop_cont
+usertests -q
+./test-xv6.py crash
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

@@ -39,12 +39,18 @@
 - `killpg` 按进程组投递信号，只影响目标组，不影响调用者所在组。
 - 新增 `pgid_basic` 回归测试。
 
-### P3-K2：SIGSTOP / SIGCONT 与 shell 作业控制
+### P3-K2a：SIGSTOP / SIGCONT 与 waitpid 停止状态
+
+状态：已完成
+
+- 增加 `stopped` 状态与 `SIGSTOP` / `SIGCONT` 投递语义。
+- `wait` / `waitpid` 支持停止状态报告，停止的子进程不会被回收。
+- 调度器跳过已停止进程，`SIGKILL` 和线程组退出会清除停止状态。
+
+### P3-K2b：shell 作业控制
 
 状态：待开始
 
-- 增加停止状态与 `SIGSTOP` / `SIGCONT` 投递语义。
-- `waitpid` 支持停止/继续状态报告。
 - shell 支持 `jobs`、`fg`、`bg`、`Ctrl-Z`。
 
 ### P3-K3：线程语义收口
