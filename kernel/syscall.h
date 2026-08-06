@@ -56,3 +56,5 @@
 #define SYS_futex_wake 53
 #define SYS_gettid 54
 #define SYS_waitpid 55
+#define SYS_set_tls 56
+#define SYS_get_tls 57

@@ -597,6 +597,7 @@ static int tgid_child_tid;
 static int shared_fd;
 static int join_val1;
 static int join_val2;
+static uint64 tls_child_val;
 
 static void
 group_worker(void *arg)
@@ -615,6 +616,13 @@ static void
 join_worker2(void *arg)
 {
   join_val2 = 2;
+}
+
+static void
+tls_worker(void *arg)
+{
+  set_tls(0x2222);
+  tls_child_val = get_tls();
 }
 
 static inline int
@@ -703,6 +711,38 @@ clone_sync(char *s)
     exit(1);
   }
   sbrk(-2 * PGSIZE);
+  exit(0);
+}
+
+// TLS：每个 clone 线程拥有独立的 tp 指针。
+void
+clone_tls(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  if(set_tls(0x1111) < 0){
+    printf("%s: set_tls failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(tls_worker, 0, stack + PGSIZE);
+  if(pid < 0 || waitpid(pid, 0) != pid){
+    printf("%s: clone_tls wait failed\n", s);
+    exit(1);
+  }
+  if(get_tls() != 0x1111){
+    printf("%s: parent tls changed\n", s);
+    exit(1);
+  }
+  if(tls_child_val != 0x2222){
+    printf("%s: child tls not independent\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
   exit(0);
 }
 
@@ -921,6 +961,7 @@ struct test proc_quicktests[] = {
   {clone_files, "clone_files"},
   {clone_cwd, "clone_cwd"},
   {clone_join, "clone_join"},
+  {clone_tls, "clone_tls"},
   {clone_group_exit, "clone_group_exit"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},

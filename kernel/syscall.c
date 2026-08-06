@@ -142,6 +142,8 @@ extern uint64 sys_futex_wait(void);
 extern uint64 sys_futex_wake(void);
 extern uint64 sys_gettid(void);
 extern uint64 sys_waitpid(void);
+extern uint64 sys_set_tls(void);
+extern uint64 sys_get_tls(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -201,6 +203,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_futex_wake] sys_futex_wake,
 [SYS_gettid] sys_gettid,
 [SYS_waitpid] sys_waitpid,
+[SYS_set_tls] sys_set_tls,
+[SYS_get_tls] sys_get_tls,
 };
 
 void

@@ -35,6 +35,22 @@ sys_gettid(void)
 }
 
 uint64
+sys_set_tls(void)
+{
+  uint64 tls;
+
+  argaddr(0, &tls);
+  myproc()->trapframe->tp = tls;
+  return 0;
+}
+
+uint64
+sys_get_tls(void)
+{
+  return myproc()->trapframe->tp;
+}
+
+uint64
 sys_getuid(void)
 {
   return myproc()->uid;

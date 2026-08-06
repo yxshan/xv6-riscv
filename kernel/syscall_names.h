@@ -60,6 +60,8 @@
   X(SYS_futex_wait, futex_wait) \
   X(SYS_futex_wake, futex_wake) \
   X(SYS_gettid, gettid) \
-  X(SYS_waitpid, waitpid)
+  X(SYS_waitpid, waitpid) \
+  X(SYS_set_tls, set_tls) \
+  X(SYS_get_tls, get_tls)
 
 #endif

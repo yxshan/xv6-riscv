@@ -712,6 +712,30 @@ usertests clone_join
 make test-quick
 ```
 
+## P3 批次十一：TLS 线程局部存储
+
+状态：已完成
+
+完成内容：
+
+- 新增 `set_tls` / `get_tls` 系统调用，读写 trapframe 中的 `tp` 寄存器值。
+- 每个 clone 线程拥有独立 trapframe，因此 TLS 指针互不干扰。
+- 新增 `clone_tls` 回归测试：子线程修改 TLS 后父线程 TLS 保持不变。
+
+涉及文件：
+
+- `kernel/sysproc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_tls
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

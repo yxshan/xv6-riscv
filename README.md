@@ -43,6 +43,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - clone 共享文件表与 cwd：子线程 close/chdir 对同组线程可见
 - 线程组退出：组长退出或按 tgid kill 时终止并回收同组线程
 - `waitpid`：按 tid 精确等待并回收指定 clone 线程
+- TLS：每个线程独立的 `tp` 指针，`set_tls` / `get_tls`
 
 ## 目录结构
 
