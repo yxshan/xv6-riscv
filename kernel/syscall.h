@@ -51,3 +51,4 @@
 #define SYS_umount 48
 #define SYS_swapout 49
 #define SYS_swapinfo 50
+#define SYS_clone 51

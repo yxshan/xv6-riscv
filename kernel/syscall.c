@@ -137,6 +137,7 @@ extern uint64 sys_mount(void);
 extern uint64 sys_umount(void);
 extern uint64 sys_swapout(void);
 extern uint64 sys_swapinfo(void);
+extern uint64 sys_clone(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -191,6 +192,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_umount] sys_umount,
 [SYS_swapout] sys_swapout,
 [SYS_swapinfo] sys_swapinfo,
+[SYS_clone] sys_clone,
 };
 
 void

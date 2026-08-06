@@ -344,10 +344,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if(flags & PTE_SHM){
-      // 共享页：子进程直接映射同一物理页，不复制内容。
-      shm_addref_pa(pa);
+      // 共享页：clone/共享 mmap 走 cowref，System V shm 走 seg->ref。
+      if(flags & PTE_COW)
+        cow_add(pa);
+      else
+        shm_addref_pa(pa);
       if(mappages(new, i, PGSIZE, pa, flags) != 0){
-        shm_subref_pa(pa);
+        if(flags & PTE_COW)
+          cow_release(pa);
+        else
+          shm_subref_pa(pa);
         goto err;
       }
       continue;
@@ -406,6 +412,86 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+
+// 为 clone 线程复制地址空间：新页表映射与父进程相同的物理页，
+// 并通过 PTE_SHM + cow 引用计数保证最后一个映射释放时才回收物理页。
+int
+uvmshare(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  pte_t *pte;
+  uint64 pa, i, flags;
+
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0 || (*pte & PTE_V) == 0)
+      continue;
+    pa = PTE2PA(*pte);
+    if(*pte & PTE_SHM){
+      // 保留现有共享映射：共享 mmap 走 cowref，System V shm 走 seg->ref。
+      flags = PTE_FLAGS(*pte);
+      if(mappages(new, i, PGSIZE, pa, flags) != 0)
+        goto err;
+      if(flags & PTE_COW)
+        cow_add(pa);
+      else
+        shm_addref_pa(pa);
+      continue;
+    }
+    if(*pte & PTE_COW){
+      if(cow_handle(old, i) < 0)
+        goto err;
+      pte = walk(old, i, 0);
+      if(pte == 0)
+        goto err;
+      pa = PTE2PA(*pte);
+    }
+    // 普通页转为 clone 共享页：PTE_SHM|PTE_COW 作为引用计数标记。
+    flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_SHM | PTE_COW | PTE_W;
+    *pte = PA2PTE(pa) | flags;
+    cow_add(pa);  // 父进程映射引用
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      goto err;
+    }
+    cow_add(pa);  // 子线程映射引用
+  }
+
+  // mmap 与共享内存区域位于堆大小之外，需要单独共享。
+  for(i = MMAP_BASE; i < TRAPFRAME; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0 || (*pte & PTE_V) == 0)
+      continue;
+    pa = PTE2PA(*pte);
+    if(*pte & PTE_SHM){
+      flags = PTE_FLAGS(*pte);
+      if(mappages(new, i, PGSIZE, pa, flags) != 0)
+        goto err;
+      if(flags & PTE_COW)
+        cow_add(pa);
+      else
+        shm_addref_pa(pa);
+      continue;
+    }
+    if(*pte & PTE_COW){
+      if(cow_handle(old, i) < 0)
+        goto err;
+      pte = walk(old, i, 0);
+      if(pte == 0)
+        goto err;
+      pa = PTE2PA(*pte);
+    }
+    flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_SHM | PTE_COW | PTE_W;
+    *pte = PA2PTE(pa) | flags;
+    cow_add(pa);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      goto err;
+    }
+    cow_add(pa);
+  }
+  return 0;
+
+err:
+  uvmunmap(new, 0, PGROUNDUP(sz) / PGSIZE, 1);
+  uvmunmap(new, MMAP_BASE, (TRAPFRAME - MMAP_BASE) / PGSIZE, 1);
   return -1;
 }
 

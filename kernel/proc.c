@@ -357,6 +357,64 @@ kfork(void)
   return pid;
 }
 
+// clone：创建共享父进程地址空间的轻量线程。
+// 新线程拥有独立 trapframe、内核栈和页表根，但叶页映射同一物理页。
+// 子线程从 clone 系统调用返回 0，用户代码随后自行切换到目标函数。
+int
+kclone(uint64 stack)
+{
+  struct proc *np;
+  struct proc *p = myproc();
+  int i, pid;
+
+  if(stack == 0 || stack >= MAXVA || stack % 16 != 0)
+    return -1;
+
+  if((np = allocproc()) == 0)
+    return -1;
+
+  if(uvmshare(p->pagetable, np->pagetable, p->sz) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  np->sz = p->sz;
+
+  // 子线程从同一系统调用返回点继续，但返回值是 0，并使用新栈。
+  *(np->trapframe) = *(p->trapframe);
+  np->trapframe->a0 = 0;
+  np->trapframe->sp = stack;
+
+  for(i = 0; i < NOFILE; i++)
+    if(p->ofile[i])
+      np->ofile[i] = filedup(p->ofile[i]);
+  np->cwd = idup(p->cwd);
+
+  safestrcpy(np->name, p->name, sizeof(p->name));
+  np->priority = p->priority;
+  np->qlevel = p->qlevel;
+  np->qticks = 0;
+  np->uid = p->uid;
+  np->euid = p->euid;
+  np->gid = p->gid;
+  np->egid = p->egid;
+  np->umask = p->umask;
+
+  pid = np->pid;
+  release(&np->lock);
+
+  acquire(&wait_lock);
+  np->parent = p;
+  release(&wait_lock);
+
+  acquire(&np->lock);
+  np->state = RUNNABLE;
+  release(&np->lock);
+
+  module_notify_proc_fork(np);
+  return pid;
+}
+
 // 进程退出时，把它的子进程重新托管给 init。
 // 调用者必须持有 wait_lock。
 void

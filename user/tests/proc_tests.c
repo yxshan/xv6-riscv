@@ -586,11 +586,47 @@ prio_boost(char *s)
   exit(0);
 }
 
+static int clone_shared;
+
+// clone：新线程共享父进程地址空间，写入对父进程可见。
+void
+clone_basic(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  clone_shared = 0;
+  pid = clone(stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    clone_shared = 0x1234;
+    exit(0);
+  }
+  if(wait(0) != pid){
+    printf("%s: clone wait failed\n", s);
+    exit(1);
+  }
+  if(clone_shared != 0x1234){
+    printf("%s: shared memory not visible\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
 // can the kernel tolerate running out of disk space?
 
 struct test proc_quicktests[] = {
   {exectest, "exectest"},
   {pipe1, "pipe1"},
+  {clone_basic, "clone_basic"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},
   {exitwait, "exitwait"},

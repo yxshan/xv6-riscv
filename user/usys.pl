@@ -75,3 +75,4 @@ entry("mount");
 entry("umount");
 entry("swapout");
 entry("swapinfo");
+entry("clone");

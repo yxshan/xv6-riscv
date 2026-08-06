@@ -524,6 +524,35 @@ aslr
 make test-quick
 ```
 
+## P3 批次四：clone 轻量线程
+
+状态：已完成（基础版，共享地址空间）
+
+完成内容：
+
+- 新增 `clone` 系统调用，子线程返回 0 并使用调用者提供的新用户栈。
+- `uvmshare()` 为 clone 子线程建立独立页表根，但叶页映射父进程同一物理页。
+- clone 共享页使用 `PTE_SHM|PTE_COW` 作为引用计数标记，最后一个映射释放时回收物理页。
+- COW 页面在 clone 前先私有化，避免线程写入穿透到 fork 父进程。
+- System V 共享内存仍使用原有 `seg->ref` 计数，共享 mmap 继续使用 cow 引用计数。
+- 子线程复制文件描述符、cwd 和进程凭证，共享地址空间但不共享 VMA 描述符。
+- 新增 `clone_basic` 回归测试，验证共享变量可见且无物理页泄漏。
+
+涉及文件：
+
+- `kernel/proc.c`、`kernel/proc.h`（无布局变化）、`kernel/vm.c`
+- `kernel/sysproc.c`、`kernel/syscall.c`、`kernel/syscall.h`
+- `kernel/syscall_names.h`、`kernel/defs.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_basic
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

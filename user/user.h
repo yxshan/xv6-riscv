@@ -54,6 +54,7 @@ int mount(int, const char*);
 int umount(const char*);
 int swapout(void);
 int swapinfo(struct swapinfo*);
+int clone(void*);
 
 // ulib.c
 int stat(const char*, struct stat*);

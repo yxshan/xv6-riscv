@@ -55,6 +55,7 @@
   X(SYS_mount, mount) \
   X(SYS_umount, umount) \
   X(SYS_swapout, swapout) \
-  X(SYS_swapinfo, swapinfo)
+  X(SYS_swapinfo, swapinfo) \
+  X(SYS_clone, clone)
 
 #endif
