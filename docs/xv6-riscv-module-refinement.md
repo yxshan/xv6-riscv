@@ -636,6 +636,33 @@ usertests clone_tgid
 make test-quick
 ```
 
+## P3 批次八：clone 共享文件表与 cwd
+
+状态：已完成
+
+完成内容：
+
+- 新增 `struct proc_files`，统一保存文件描述符表和 cwd，并带引用计数。
+- 普通进程和 fork 子进程各持有一份独立文件表，底层 file 对象共享。
+- clone 线程共享同一 `proc_files`，`close`、`dup`、`chdir` 对同组线程可见。
+- 最后一个引用释放时统一关闭 fd 和 cwd。
+- 新增 `clone_files`、`clone_cwd` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/file.c`
+- `kernel/sysfile.c`、`kernel/fs.c`、`kernel/defs.h`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_files
+usertests clone_cwd
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

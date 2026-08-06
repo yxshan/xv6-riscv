@@ -151,6 +151,7 @@ found:
   p->is_kthread = 0;
   p->kthread_fn = 0;
   p->kthread_arg = 0;
+  p->files = 0;
   p->uid = 0;
   p->euid = 0;
   p->gid = 0;
@@ -204,6 +205,7 @@ freeproc(struct proc *p)
   p->is_kthread = 0;
   p->kthread_fn = 0;
   p->kthread_arg = 0;
+  p->files = 0;
   p->parent = 0;
   p->name[0] = 0;
   p->chan = 0;
@@ -268,7 +270,10 @@ userinit(void)
   p = allocproc();
   initproc = p;
   
-  p->cwd = namei("/");
+  p->files = proc_files_alloc();
+  if(p->files == 0)
+    panic("proc_files_alloc");
+  p->files->cwd = namei("/");
 
   p->state = RUNNABLE;
 
@@ -304,7 +309,7 @@ growproc(int n)
 int
 kfork(void)
 {
-  int i, pid;
+  int pid;
   struct proc *np;
   struct proc *p = myproc();
 
@@ -332,11 +337,14 @@ kfork(void)
   // 把子进程的 a0 设为 0，实现“子进程 fork 返回 0”。
   np->trapframe->a0 = 0;
 
-  // 复制打开文件表，并递增引用计数。
-  for(i = 0; i < NOFILE; i++)
-    if(p->ofile[i])
-      np->ofile[i] = filedup(p->ofile[i]);
-  np->cwd = idup(p->cwd);
+  // fork 得到独立文件描述符表，但底层 file 对象共享。
+  np->files = proc_files_alloc();
+  if(np->files == 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  proc_files_copy(np->files, p->files);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
   np->priority = p->priority;
@@ -374,7 +382,7 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
 {
   struct proc *np;
   struct proc *p = myproc();
-  int i, pid;
+  int pid;
 
   if(stack == 0 || stack >= MAXVA || stack % 16 != 0 ||
      fn == 0 || fn >= MAXVA || stub == 0 || stub >= MAXVA)
@@ -397,10 +405,9 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   np->trapframe->a1 = arg;
   np->trapframe->sp = stack;
 
-  for(i = 0; i < NOFILE; i++)
-    if(p->ofile[i])
-      np->ofile[i] = filedup(p->ofile[i]);
-  np->cwd = idup(p->cwd);
+  // clone 线程共享父进程的文件描述符表和 cwd。
+  np->files = p->files;
+  proc_files_share(p->files);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
   np->priority = p->priority;
@@ -474,7 +481,7 @@ kthread_create(void (*fn)(void*), void *arg)
     p->umask = 022;
     p->trapframe = 0;
     p->pagetable = 0;
-    p->cwd = 0;
+    p->files = 0;
     p->sz = 0;
     memset(p->vmas, 0, sizeof(p->vmas));
     p->sigpending = 0;
@@ -526,21 +533,9 @@ kexit(int status)
   if(p == initproc)
     panic("init exiting");
 
-  // 关闭进程占用的所有文件描述符。
-  for(int fd = 0; fd < NOFILE; fd++){
-    if(p->ofile[fd]){
-      struct file *f = p->ofile[fd];
-      fileclose(f);
-      p->ofile[fd] = 0;
-    }
-  }
-
-  if(p->cwd){
-    begin_op();
-    iput(p->cwd);
-    end_op();
-    p->cwd = 0;
-  }
+  // 最后一个线程/进程退出时关闭共享文件表与 cwd。
+  proc_files_release(p->files);
+  p->files = 0;
 
   vma_clear(p);
 

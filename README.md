@@ -40,6 +40,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - `futex` 与 `thread_create`：用户态互斥同步、线程入口 stub 与 `gettid`
 - 内核线程：`kthread_create` 复用进程表与 MLFQ 调度器，内核态执行后自动退出
 - 线程组语义：`getpid()` 返回 tgid，`gettid()` 返回 tid，clone 线程共享 tgid
+- clone 共享文件表与 cwd：子线程 close/chdir 对同组线程可见
 
 ## 目录结构
 

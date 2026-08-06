@@ -594,6 +594,7 @@ static int sync_tid;
 static int sync_workers;
 static int tgid_child_pid;
 static int tgid_child_tid;
+static int shared_fd;
 
 static inline int
 sync_atomic_swap(int *p, int v)
@@ -624,6 +625,19 @@ tgid_worker(void *arg)
 {
   tgid_child_pid = getpid();
   tgid_child_tid = gettid();
+}
+
+static void
+files_worker(void *arg)
+{
+  close(shared_fd);
+}
+
+static void
+cwd_worker(void *arg)
+{
+  if(chdir("cdir") < 0)
+    exit(1);
 }
 
 // clone + futex：两个线程通过共享 mutex 保护计数器，最终结果必须无丢失更新。
@@ -668,6 +682,75 @@ clone_sync(char *s)
     exit(1);
   }
   sbrk(-2 * PGSIZE);
+  exit(0);
+}
+
+// clone 线程共享文件描述符表：子线程 close 后父进程同一 fd 也失效。
+void
+clone_files(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  shared_fd = open("sharedfile", O_CREATE|O_RDWR);
+  if(shared_fd < 0){
+    printf("%s: open sharedfile failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(files_worker, 0, stack + PGSIZE);
+  if(pid < 0 || wait(0) != pid){
+    printf("%s: clone_files wait failed\n", s);
+    exit(1);
+  }
+  if(close(shared_fd) != -1){
+    printf("%s: file table not shared\n", s);
+    exit(1);
+  }
+  unlink("sharedfile");
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
+// clone 线程共享 cwd：子线程 chdir 后父进程相对路径随之改变。
+void
+clone_cwd(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  struct stat st;
+  int pid, fd;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  unlink("/cdir");
+  if(mkdir("/cdir") < 0){
+    printf("%s: mkdir cdir failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(cwd_worker, 0, stack + PGSIZE);
+  if(pid < 0 || wait(0) != pid){
+    printf("%s: clone_cwd wait failed\n", s);
+    exit(1);
+  }
+  fd = open("probe", O_CREATE|O_WRONLY);
+  if(fd < 0){
+    printf("%s: open probe failed\n", s);
+    exit(1);
+  }
+  close(fd);
+  if(stat("/cdir/probe", &st) < 0 || stat("/probe", &st) == 0){
+    printf("%s: cwd not shared\n", s);
+    exit(1);
+  }
+  unlink("/cdir/probe");
+  chdir("/");
+  unlink("/cdir");
+  sbrk(-PGSIZE);
   exit(0);
 }
 
@@ -752,6 +835,8 @@ struct test proc_quicktests[] = {
   {clone_basic, "clone_basic"},
   {clone_sync, "clone_sync"},
   {clone_tgid, "clone_tgid"},
+  {clone_files, "clone_files"},
+  {clone_cwd, "clone_cwd"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},
   {exitwait, "exitwait"},

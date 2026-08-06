@@ -28,7 +28,7 @@ argfd(int n, int *pfd, struct file **pf)
   struct file *f;
 
   argint(n, &fd);
-  if(fd < 0 || fd >= NOFILE || (f=myproc()->ofile[fd]) == 0)
+  if(fd < 0 || fd >= NOFILE || (f=myproc()->files->ofile[fd]) == 0)
     return -1;
   if(pfd)
     *pfd = fd;
@@ -46,8 +46,8 @@ fdalloc(struct file *f)
   struct proc *p = myproc();
 
   for(fd = 0; fd < NOFILE; fd++){
-    if(p->ofile[fd] == 0){
-      p->ofile[fd] = f;
+    if(p->files->ofile[fd] == 0){
+      p->files->ofile[fd] = f;
       return fd;
     }
   }
@@ -107,7 +107,7 @@ sys_close(void)
 
   if(argfd(0, &fd, &f) < 0)
     return -1;
-  myproc()->ofile[fd] = 0;
+  myproc()->files->ofile[fd] = 0;
   fileclose(f);
   return 0;
 }
@@ -552,7 +552,7 @@ sys_open(void)
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
 
   if(ip->type == T_DEVICE && devsw[f->major].open && devsw[f->major].open(f) < 0){
-    myproc()->ofile[fd] = 0;
+    myproc()->files->ofile[fd] = 0;
     iunlock(ip);
     fileclose(f);
     end_op();
@@ -630,9 +630,9 @@ sys_chdir(void)
   }
   // 释放旧 cwd 的引用，换用新目录的引用。
   iunlock(ip);
-  iput(p->cwd);
+  iput(p->files->cwd);
   end_op();
-  p->cwd = ip;
+  p->files->cwd = ip;
   return 0;
 }
 
@@ -695,7 +695,7 @@ sys_pipe(void)
   fd0 = -1;
   if((fd0 = fdalloc(rf)) < 0 || (fd1 = fdalloc(wf)) < 0){
     if(fd0 >= 0)
-      p->ofile[fd0] = 0;
+      p->files->ofile[fd0] = 0;
     fileclose(rf);
     fileclose(wf);
     return -1;
@@ -703,8 +703,8 @@ sys_pipe(void)
   // 把两个描述符写回用户提供的 int[2] 数组。
   if(copyout(p->pagetable, fdarray, (char*)&fd0, sizeof(fd0)) < 0 ||
      copyout(p->pagetable, fdarray+sizeof(fd0), (char *)&fd1, sizeof(fd1)) < 0){
-    p->ofile[fd0] = 0;
-    p->ofile[fd1] = 0;
+    p->files->ofile[fd0] = 0;
+    p->files->ofile[fd1] = 0;
     fileclose(rf);
     fileclose(wf);
     return -1;

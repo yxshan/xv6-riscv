@@ -83,6 +83,15 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
+// 共享的文件描述符表与文件系统上下文。
+// 普通进程各自持有一份；clone 线程共享同一份，并增加 ref。
+struct proc_files {
+  struct spinlock lock;
+  int ref;
+  struct file *ofile[NOFILE];
+  struct inode *cwd;
+};
+
 // 进程状态机：
 // UNUSED（空槽位）-> USED（已分配）-> RUNNABLE -> RUNNING，
 // RUNNING 可以因等待资源进入 SLEEPING，或因退出进入 ZOMBIE。
@@ -131,8 +140,7 @@ struct proc {
   pagetable_t pagetable;       // 用户页表
   struct trapframe *trapframe; // 保存用户寄存器现场的页面
   struct context context;      // 内核上下文，swtch() 保存/恢复
-  struct file *ofile[NOFILE];  // 打开的文件描述符表
-  struct inode *cwd;           // 当前工作目录
+  struct proc_files *files;    // 文件描述符表与 cwd（可被 clone 共享）
   struct vma vmas[NVMA];       // mmap 虚拟内存区域
   char name[16];               // 进程名（用于调试输出）
 };

@@ -31,6 +31,66 @@ fileinit(void)
   initlock(&ftable.lock, "ftable");
 }
 
+struct proc_files*
+proc_files_alloc(void)
+{
+  struct proc_files *pf = kalloc();
+
+  if(pf == 0)
+    return 0;
+  memset(pf, 0, PGSIZE);
+  initlock(&pf->lock, "proc_files");
+  pf->ref = 1;
+  return pf;
+}
+
+void
+proc_files_share(struct proc_files *pf)
+{
+  acquire(&pf->lock);
+  pf->ref++;
+  release(&pf->lock);
+}
+
+// fork 时复制文件描述符表：底层 file 对象共享，但表本身独立。
+void
+proc_files_copy(struct proc_files *dst, struct proc_files *src)
+{
+  acquire(&src->lock);
+  for(int i = 0; i < NOFILE; i++)
+    if(src->ofile[i])
+      dst->ofile[i] = filedup(src->ofile[i]);
+  dst->cwd = idup(src->cwd);
+  release(&src->lock);
+}
+
+// 释放一个文件上下文引用；最后一个引用关闭所有 fd 和 cwd。
+void
+proc_files_release(struct proc_files *pf)
+{
+  int last = 0;
+
+  if(pf == 0)
+    return;
+  acquire(&pf->lock);
+  if(--pf->ref == 0)
+    last = 1;
+  release(&pf->lock);
+  if(!last)
+    return;
+
+  for(int i = 0; i < NOFILE; i++){
+    if(pf->ofile[i])
+      fileclose(pf->ofile[i]);
+  }
+  if(pf->cwd){
+    begin_op();
+    iput(pf->cwd);
+    end_op();
+  }
+  kfree(pf);
+}
+
 // 从全局文件表分配一个 struct file，并把引用计数置为 1。
 struct file*
 filealloc(void)

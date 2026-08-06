@@ -241,6 +241,11 @@ P3 批次七新增回归用例：
 
 - `clone_tgid`：clone 子线程的 `getpid()` 等于父进程 tgid，`gettid()` 是新 tid。
 
+P3 批次八新增回归用例：
+
+- `clone_files`：子线程 close 共享 fd 后，父进程同一 fd 失效。
+- `clone_cwd`：子线程 chdir 后，父进程相对路径随之改变。
+
 工具测试新增：
 
 - `swapinfo`：显示交换盘总页数、空闲页数和换入换出计数。
