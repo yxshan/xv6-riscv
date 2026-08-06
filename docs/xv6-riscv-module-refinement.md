@@ -856,21 +856,26 @@ usertests pgid_basic
 make test-quick
 ```
 
-## P3-K2a：SIGSTOP / SIGCONT 与 waitpid 停止状态
+## P3-K2a：内核 STOPPED 状态与 waitpid 选项
 
 状态：已完成
 
 完成内容：
 
-- `struct proc` 增加 `stopped` 状态，调度器跳过已停止进程。
-- `killpg` 支持向整个进程组投递 `SIGSTOP` / `SIGCONT`。
-- `wait` / `waitpid` 对已停止子进程返回 `WSTOPPED` 状态，但不回收 PCB。
-- `SIGKILL`、`kkill` 和线程组退出会清除停止状态，避免停止线程阻止组回收。
-- 新增 `sig_stop_cont` 回归测试。
+- `enum procstate` 新增 `STOPPED`，`SIGSTOP` / `SIGTSTP` 通过 `stop_pending`
+  延迟到返回用户态前生效，避免打断 fork/exec 早期路径。
+- 停止后的进程在 `usertrap` 中切到调度器，不再返回用户态；`SIGCONT` 恢复运行。
+- `killpg` 支持向整个进程组投递 `SIGSTOP` / `SIGCONT` / `SIGTSTP`。
+- 新增 `waitpid_flags(pid, status, options)`，支持 `WUNTRACED` / `WCONTINUED`。
+- `SIGKILL`、`kkill` 和线程组退出会把停止进程恢复为可运行后回收。
+- 新增 `sig_stop_cont` 回归测试，覆盖停止和继续事件。
 
 涉及文件：
 
-- `kernel/proc.h`、`kernel/proc.c`、`kernel/signal.h`、`kernel/stat.h`
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/trap.c`、`kernel/sysproc.c`
+- `kernel/signal.h`、`kernel/stat.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`
 - `user/tests/module_tests.c`
 
 验证命令：

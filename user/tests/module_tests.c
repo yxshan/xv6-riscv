@@ -377,6 +377,7 @@ sig_stop_cont(char *s)
     shared[1] = 1;
     while(shared[2] == 0)
       pause(1);
+    pause(20);
     exit(0);
   }
   if(setpgid(pid, pid) < 0){
@@ -395,7 +396,7 @@ sig_stop_cont(char *s)
     printf("%s: SIGSTOP failed\n", s);
     exit(1);
   }
-  if(waitpid(pid, &st) != pid || !XV6_WIFSTOPPED(st)){
+  if(waitpid_flags(pid, &st, WUNTRACED) != pid || !XV6_WIFSTOPPED(st)){
     printf("%s: waitpid did not report stopped\n", s);
     exit(1);
   }
@@ -403,6 +404,11 @@ sig_stop_cont(char *s)
   shared[2] = 1;
   if(killpg(pid, SIGCONT) < 0){
     printf("%s: SIGCONT failed\n", s);
+    exit(1);
+  }
+  if(waitpid_flags(pid, &st, WCONTINUED) != pid ||
+     !XV6_WIFCONTINUED(st)){
+    printf("%s: waitpid did not report continued\n", s);
     exit(1);
   }
   if(waitpid(pid, &st) != pid){

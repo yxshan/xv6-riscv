@@ -47,3 +47,8 @@ struct stat {
 // wait/waitpid 状态编码：低 8 位为退出码；0x7f 表示子进程已停止。
 #define XV6_WSTOPPED 0x7f
 #define XV6_WIFSTOPPED(x) ((x) == XV6_WSTOPPED)
+#define XV6_WCONTINUED 0xffff
+#define XV6_WIFCONTINUED(x) ((x) == XV6_WCONTINUED)
+
+#define WUNTRACED 1
+#define WCONTINUED 2

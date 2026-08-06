@@ -63,3 +63,4 @@
 #define SYS_setpgid 60
 #define SYS_getpgid 61
 #define SYS_killpg 62
+#define SYS_waitpid_flags 63

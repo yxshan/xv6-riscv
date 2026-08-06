@@ -50,6 +50,17 @@ deliver_signal(struct proc *p)
   if(p->sig == 0 || p->sigactive)
     return;
 
+  // 停止信号延迟到返回用户态前生效，避免打断 fork/exec 早期路径。
+  acquire(&p->lock);
+  if(p->stop_pending){
+    p->stop_pending = 0;
+    p->state = STOPPED;
+    release(&p->lock);
+    wakeup(p->parent);
+    return;
+  }
+  release(&p->lock);
+
   acquire(&p->lock);
   pending = p->sigpending;
   blocked = p->sigblocked;
@@ -176,6 +187,13 @@ usertrap(void)
     yield();
 
   deliver_signal(p);
+
+  // 已停止的进程不能返回用户态，切到调度器等待 SIGCONT。
+  if(p->state == STOPPED){
+    acquire(&p->lock);
+    sched();
+    release(&p->lock);
+  }
 
   if(killed(p))
     kexit(-1);

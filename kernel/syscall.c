@@ -142,6 +142,7 @@ extern uint64 sys_futex_wait(void);
 extern uint64 sys_futex_wake(void);
 extern uint64 sys_gettid(void);
 extern uint64 sys_waitpid(void);
+extern uint64 sys_waitpid_flags(void);
 extern uint64 sys_set_tls(void);
 extern uint64 sys_get_tls(void);
 extern uint64 sys_tgkill(void);
@@ -208,6 +209,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_futex_wake] sys_futex_wake,
 [SYS_gettid] sys_gettid,
 [SYS_waitpid] sys_waitpid,
+[SYS_waitpid_flags] sys_waitpid_flags,
 [SYS_set_tls] sys_set_tls,
 [SYS_get_tls] sys_get_tls,
 [SYS_tgkill] sys_tgkill,

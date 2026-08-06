@@ -112,9 +112,9 @@ struct proc_vmas {
 
 // 进程状态机：
 // UNUSED（空槽位）-> USED（已分配）-> RUNNABLE -> RUNNING，
-// RUNNING 可以因等待资源进入 SLEEPING，或因退出进入 ZOMBIE。
-// ZOMBIE 进程保留 PCB，直到父进程 wait() 回收。
-enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+// RUNNING 可以因等待资源进入 SLEEPING，或因退出进入 ZOMBIE；
+// 收到停止信号后进入 STOPPED，SIGCONT 再恢复为 RUNNABLE。
+enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE, STOPPED };
 
 // MLFQ 队列数量与各队列时间片（时钟 tick 数）。
 #define MLFQ_NQUEUES 3
@@ -130,7 +130,8 @@ struct proc {
   enum procstate state;        // Process state
   void *chan;                  // 非 0 时表示正在等待的唤醒通道
   int killed;                  // 非 0 表示已被 kill
-  int stopped;                 // 非 0 表示已被 SIGSTOP 停止
+  int stop_pending;            // 非 0 表示有等待生效的停止信号
+  int continued;               // 非 0 表示刚被 SIGCONT 继续
   int xstate;                  // 退出状态，等待父进程 wait() 读取
   int pid;                     // Process ID
   int tgid;                    // Thread group ID，普通进程等于 pid

@@ -60,6 +60,7 @@ int futex_wait(uint64, int);
 int futex_wake(uint64, int);
 int gettid(void);
 int waitpid(int, int*);
+int waitpid_flags(int, int*, int);
 int set_tls(uint64);
 uint64 get_tls(void);
 int tgkill(int, int, int);

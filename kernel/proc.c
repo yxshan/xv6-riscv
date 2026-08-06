@@ -210,7 +210,8 @@ found:
   p->sigpending = 0;
   p->sigblocked = 0;
   p->sigactive = 0;
-  p->stopped = 0;
+  p->stop_pending = 0;
+  p->continued = 0;
   p->state = USED;
 
   // 分配保存用户寄存器现场的 trapframe 页面。
@@ -264,7 +265,8 @@ freeproc(struct proc *p)
   p->name[0] = 0;
   p->chan = 0;
   p->killed = 0;
-  p->stopped = 0;
+  p->stop_pending = 0;
+  p->continued = 0;
   p->xstate = 0;
   p->sigpending = 0;
   p->sigblocked = 0;
@@ -594,7 +596,8 @@ kthread_create(void (*fn)(void*), void *arg)
     p->sigpending = 0;
     p->sigblocked = 0;
     p->sigactive = 0;
-    p->stopped = 0;
+    p->stop_pending = 0;
+    p->continued = 0;
     p->state = USED;
 
     memset(&p->context, 0, sizeof(p->context));
@@ -644,8 +647,7 @@ thread_group_exit(struct proc *p)
     acquire(&q->lock);
     if(q->state != UNUSED){
       q->killed = 1;
-      q->stopped = 0;
-      if(q->state == SLEEPING)
+      if(q->state == SLEEPING || q->state == STOPPED)
         q->state = RUNNABLE;
     }
     release(&q->lock);
@@ -749,19 +751,6 @@ kwait(uint64 addr)
           release(&wait_lock);
           return pid;
         }
-        if(pp->stopped){
-          int st = XV6_WSTOPPED;
-          pid = pp->pid;
-          if(addr != 0 &&
-             copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0){
-            release(&pp->lock);
-            release(&wait_lock);
-            return -1;
-          }
-          release(&pp->lock);
-          release(&wait_lock);
-          return pid;
-        }
         release(&pp->lock);
       }
     }
@@ -781,11 +770,18 @@ kwait(uint64 addr)
 int
 kwaitpid(int pid, uint64 addr)
 {
+  return kwaitpid_flags(pid, addr, 0);
+}
+
+// 带选项等待指定 pid：WUNTRACED 报告停止，WCONTINUED 报告继续。
+int
+kwaitpid_flags(int pid, uint64 addr, int options)
+{
   struct proc *pp;
   struct proc *p = myproc();
   int found;
 
-  if(pid <= 0)
+  if(pid <= 0 || (options & ~(WUNTRACED | WCONTINUED)))
     return -1;
 
   acquire(&wait_lock);
@@ -808,7 +804,20 @@ kwaitpid(int pid, uint64 addr)
           release(&wait_lock);
           return xpid;
         }
-        if(pp->stopped){
+        if(pp->continued && (options & WCONTINUED)){
+          int st = XV6_WCONTINUED;
+          pp->continued = 0;
+          if(addr != 0 &&
+             copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0){
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          release(&pp->lock);
+          release(&wait_lock);
+          return pp->pid;
+        }
+        if(pp->state == STOPPED && (options & WUNTRACED)){
           int st = XV6_WSTOPPED;
           if(addr != 0 &&
              copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0){
@@ -856,7 +865,7 @@ scheduler(void)
     bestq = MLFQ_NQUEUES;
     for(p = proc; p < &proc[NPROC]; p++){
       acquire(&p->lock);
-      if(p->state == RUNNABLE && !p->stopped && p->qlevel < bestq)
+      if(p->state == RUNNABLE && p->qlevel < bestq)
         bestq = p->qlevel;
       release(&p->lock);
     }
@@ -867,7 +876,7 @@ scheduler(void)
       for(k = 0; k < NPROC; k++){
         p = &proc[(start + k) % NPROC];
         acquire(&p->lock);
-        if(p->state == RUNNABLE && !p->stopped && p->qlevel == bestq){
+        if(p->state == RUNNABLE && p->qlevel == bestq){
           best = p;
           rr[bestq] = (start + k + 1) % NPROC;
           release(&p->lock);
@@ -957,8 +966,7 @@ signal_deliver_thread(struct proc *p, int sig)
   if(sig == SIGKILL){
     acquire(&p->lock);
     p->killed = 1;
-    p->stopped = 0;
-    if(p->state == SLEEPING)
+    if(p->state == SLEEPING || p->state == STOPPED)
       p->state = RUNNABLE;
     release(&p->lock);
     return 0;
@@ -966,23 +974,40 @@ signal_deliver_thread(struct proc *p, int sig)
 
   if(sig == SIGSTOP){
     acquire(&p->lock);
-    p->stopped = 1;
+    p->stop_pending = 1;
+    if(p->state == SLEEPING)
+      p->state = RUNNABLE;
     release(&p->lock);
-    wakeup(p->parent);
     return 0;
   }
   if(sig == SIGCONT){
     acquire(&p->lock);
-    p->stopped = 0;
-    if(p->state != ZOMBIE && p->state != UNUSED)
+    p->stop_pending = 0;
+    if(p->state == STOPPED){
       p->state = RUNNABLE;
+      p->continued = 1;
+    }
     release(&p->lock);
+    wakeup(p->parent);
     return 0;
   }
 
   acquire(&p->sig->lock);
   h = p->sig->handlers[sig];
   release(&p->sig->lock);
+
+  if(sig == SIGTSTP){
+    if(h == 3) // SIG_IGN
+      return 0;
+    if(h == 0 || h == 2){ // SIG_DFL: 与 SIGSTOP 一样延迟停止
+      acquire(&p->lock);
+      p->stop_pending = 1;
+      if(p->state == SLEEPING)
+        p->state = RUNNABLE;
+      release(&p->lock);
+      return 0;
+    }
+  }
 
   if(h == 3) // SIG_IGN
     return 0;
@@ -1018,7 +1043,7 @@ signal_group(struct proc *leader, int sig)
     }
     return 0;
   }
-  if(sig == SIGSTOP || sig == SIGCONT){
+  if(sig == SIGSTOP || sig == SIGCONT || sig == SIGTSTP){
     for(p = proc; p < &proc[NPROC]; p++){
       if(p->state != UNUSED && p->tgid == leader->tgid)
         signal_deliver_thread(p, sig);
@@ -1366,7 +1391,7 @@ sleep(void *chan, struct spinlock *lk)
   release(lk);
 
   // 已有可投递信号时不进入睡眠，让调用者返回用户态后先处理信号。
-  if(sig_pending_unblocked(p)){
+  if(p->stop_pending || sig_pending_unblocked(p)){
     release(&p->lock);
     acquire(lk);
     return;
@@ -1416,8 +1441,7 @@ kkill(int pid)
     acquire(&p->lock);
     if(p->state != UNUSED && (p->pid == pid || p->tgid == pid)){
       p->killed = 1;
-      p->stopped = 0;
-      if(p->state == SLEEPING){
+      if(p->state == SLEEPING || p->state == STOPPED){
         // 被 kill 的睡眠进程也要唤醒，让它有机会检查 killed。
         p->state = RUNNABLE;
       }
@@ -1508,7 +1532,8 @@ procdump(void)
   [SLEEPING]  "sleep ",
   [RUNNABLE]  "runble",
   [RUNNING]   "run   ",
-  [ZOMBIE]    "zombie"
+  [ZOMBIE]    "zombie",
+  [STOPPED]   "stop  "
   };
   struct proc *p;
   char *state;
@@ -1521,8 +1546,6 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    if(p->stopped)
-      state = "stop  ";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }

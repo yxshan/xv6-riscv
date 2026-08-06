@@ -39,13 +39,14 @@
 - `killpg` 按进程组投递信号，只影响目标组，不影响调用者所在组。
 - 新增 `pgid_basic` 回归测试。
 
-### P3-K2a：SIGSTOP / SIGCONT 与 waitpid 停止状态
+### P3-K2a：内核 STOPPED 状态与 waitpid 选项
 
 状态：已完成
 
-- 增加 `stopped` 状态与 `SIGSTOP` / `SIGCONT` 投递语义。
-- `wait` / `waitpid` 支持停止状态报告，停止的子进程不会被回收。
-- 调度器跳过已停止进程，`SIGKILL` 和线程组退出会清除停止状态。
+- `enum procstate` 新增 `STOPPED`，`SIGSTOP` / `SIGTSTP` 延迟到返回用户态前生效。
+- 停止后的进程不再返回用户态，而是切到调度器等待 `SIGCONT`。
+- `waitpid_flags` 支持 `WUNTRACED` / `WCONTINUED`，停止和继续事件都不会回收 PCB。
+- `SIGKILL` 和线程组退出会把停止进程恢复为可运行后回收。
 
 ### P3-K2b：shell 作业控制
 

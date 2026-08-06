@@ -16,5 +16,6 @@
 #define SIGUSR2 12
 #define SIGSTOP 17
 #define SIGCONT 18
+#define SIGTSTP 20
 
 #endif

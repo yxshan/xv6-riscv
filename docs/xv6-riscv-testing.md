@@ -279,8 +279,8 @@ P3-K1 新增回归用例：
 
 P3-K2a 新增回归用例：
 
-- `sig_stop_cont`：子进程被 `SIGSTOP` 停止后 `waitpid` 返回停止状态，
-  `SIGCONT` 后子进程恢复并正常退出。
+- `sig_stop_cont`：子进程被 `SIGSTOP` 停止后 `waitpid_flags` 以 `WUNTRACED`
+  返回停止状态，`SIGCONT` 后以 `WCONTINUED` 返回继续事件，子进程随后正常退出。
 
 工具测试新增：
 

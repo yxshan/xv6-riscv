@@ -80,6 +80,7 @@ entry("futex_wait");
 entry("futex_wake");
 entry("gettid");
 entry("waitpid");
+entry("waitpid_flags");
 entry("set_tls");
 entry("get_tls");
 entry("tgkill");

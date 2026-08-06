@@ -48,7 +48,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 线程组信号：clone 线程共享信号处理表，`tgkill` 精确投递，`sigprocmask` 支持信号阻塞
 - clone 共享 VMA 表：`mmap` / `munmap` 与需求分页页面对同组线程可见
 - 进程组：`setpgid` / `getpgid` / `killpg`，支持按进程组投递信号
-- `SIGSTOP` / `SIGCONT`：进程停止/继续，`wait` / `waitpid` 可报告停止状态
+- `SIGSTOP` / `SIGCONT`：进程停止/继续，`waitpid_flags` 支持 `WUNTRACED` / `WCONTINUED`
 
 ## 目录结构
 

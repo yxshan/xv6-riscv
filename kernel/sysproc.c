@@ -165,6 +165,18 @@ sys_waitpid(void)
 }
 
 uint64
+sys_waitpid_flags(void)
+{
+  int pid, options;
+  uint64 p;
+
+  argint(0, &pid);
+  argaddr(1, &p);
+  argint(2, &options);
+  return kwaitpid_flags(pid, p, options);
+}
+
+uint64
 sys_sbrk(void)
 {
   uint64 addr;
@@ -212,6 +224,10 @@ sys_pause(void)
       return -1;
     }
     sleep(&ticks, &tickslock);
+    if(myproc()->stop_pending){
+      release(&tickslock);
+      return -1;
+    }
   }
   release(&tickslock);
   return 0;
