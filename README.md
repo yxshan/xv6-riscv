@@ -45,6 +45,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - `waitpid`：按 tid 精确等待并回收指定 clone 线程
 - TLS：每个线程独立的 `tp` 指针，`set_tls` / `get_tls`
 - `tgkill`：精确向线程组内指定 tid 发送终止信号
+- clone 共享 VMA 表：`mmap` / `munmap` 与需求分页页面对同组线程可见
 
 ## 目录结构
 

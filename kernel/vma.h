@@ -10,6 +10,7 @@
 struct inode;
 
 #define NVMA 16
+#define VMA_PAGE_COUNT 256
 
 struct vma {
   int used;

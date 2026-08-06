@@ -157,7 +157,7 @@ found:
   p->gid = 0;
   p->egid = 0;
   p->umask = 022;
-  memset(p->vmas, 0, sizeof(p->vmas));
+  p->vmas = 0;
   p->sigpending = 0;
   p->sigactive = 0;
   memset(p->sighandlers, 0, sizeof(p->sighandlers));
@@ -192,7 +192,7 @@ found:
 static void
 freeproc(struct proc *p)
 {
-  vma_clear(p);
+  proc_vmas_release(p);
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
@@ -206,6 +206,7 @@ freeproc(struct proc *p)
   p->kthread_fn = 0;
   p->kthread_arg = 0;
   p->files = 0;
+  p->vmas = 0;
   p->parent = 0;
   p->name[0] = 0;
   p->chan = 0;
@@ -274,6 +275,9 @@ userinit(void)
   if(p->files == 0)
     panic("proc_files_alloc");
   p->files->cwd = namei("/");
+  p->vmas = proc_vmas_alloc();
+  if(p->vmas == 0)
+    panic("proc_vmas_alloc");
 
   p->state = RUNNABLE;
 
@@ -318,13 +322,27 @@ kfork(void)
     return -1;
   }
 
+  np->vmas = proc_vmas_alloc();
+  if(np->vmas == 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  // VMA 表使用 sleeplock，初始化阶段不能继续持有 np->lock：
+  // 否则 releasesleep() 里的 wakeup() 会递归获取同一把 PCB 锁。
+  release(&np->lock);
+
   // 复制父进程的用户内存（当前是完整复制物理页）。
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+    proc_vmas_release(np);
+    acquire(&np->lock);
     freeproc(np);
     release(&np->lock);
     return -1;
   }
   if(vma_copy(np, p) < 0){
+    proc_vmas_release(np);
+    acquire(&np->lock);
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -340,6 +358,8 @@ kfork(void)
   // fork 得到独立文件描述符表，但底层 file 对象共享。
   np->files = proc_files_alloc();
   if(np->files == 0){
+    proc_vmas_release(np);
+    acquire(&np->lock);
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -358,8 +378,6 @@ kfork(void)
 
   pid = np->pid;
   np->tgid = pid;
-
-  release(&np->lock);
 
   acquire(&wait_lock);
   np->parent = p;
@@ -391,7 +409,15 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   if((np = allocproc()) == 0)
     return -1;
 
+  if(p->vmas == 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  release(&np->lock);
+
   if(uvmshare(p->pagetable, np->pagetable, p->sz) < 0){
+    acquire(&np->lock);
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -408,6 +434,8 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   // clone 线程共享父进程的文件描述符表和 cwd。
   np->files = p->files;
   proc_files_share(p->files);
+  np->vmas = p->vmas;
+  proc_vmas_share(p->vmas);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
   np->priority = p->priority;
@@ -421,7 +449,6 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
 
   np->tgid = p->tgid;
   pid = np->pid;
-  release(&np->lock);
 
   acquire(&wait_lock);
   np->parent = p;
@@ -482,8 +509,8 @@ kthread_create(void (*fn)(void*), void *arg)
     p->trapframe = 0;
     p->pagetable = 0;
     p->files = 0;
+    p->vmas = 0;
     p->sz = 0;
-    memset(p->vmas, 0, sizeof(p->vmas));
     p->sigpending = 0;
     p->sigactive = 0;
     memset(p->sighandlers, 0, sizeof(p->sighandlers));
@@ -580,7 +607,7 @@ kexit(int status)
   proc_files_release(p->files);
   p->files = 0;
 
-  vma_clear(p);
+  proc_vmas_release(p);
 
   acquire(&wait_lock);
 

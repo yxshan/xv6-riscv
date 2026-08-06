@@ -598,6 +598,7 @@ static int shared_fd;
 static int join_val1;
 static int join_val2;
 static uint64 tls_child_val;
+static char *vma_shared_map;
 
 static void
 group_worker(void *arg)
@@ -667,6 +668,15 @@ cwd_worker(void *arg)
 {
   if(chdir("cdir") < 0)
     exit(1);
+}
+
+static void
+vma_worker(void *arg)
+{
+  if(vma_shared_map == 0)
+    exit(1);
+  vma_shared_map[0] = 'C';
+  vma_shared_map[PGSIZE - 1] = 'D';
 }
 
 // clone + futex：两个线程通过共享 mutex 保护计数器，最终结果必须无丢失更新。
@@ -906,6 +916,46 @@ clone_cwd(char *s)
   exit(0);
 }
 
+// clone 线程共享 VMA 表：父线程 mmap 后子线程缺页建立页面，
+// 父线程再次访问时必须看到同一物理页。
+void
+clone_vma(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  vma_shared_map = mmap(0, 2*PGSIZE, PROT_READ|PROT_WRITE,
+                        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+  if(vma_shared_map == MAP_FAILED){
+    printf("%s: mmap failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(vma_worker, 0, stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, 0) != pid){
+    printf("%s: clone_vma wait failed\n", s);
+    exit(1);
+  }
+  if(vma_shared_map[0] != 'C' || vma_shared_map[PGSIZE - 1] != 'D'){
+    printf("%s: vma page not shared\n", s);
+    exit(1);
+  }
+  if(munmap(vma_shared_map, 2*PGSIZE) < 0){
+    printf("%s: munmap failed\n", s);
+    exit(1);
+  }
+  vma_shared_map = 0;
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
 // clone 线程共享 tgid：子线程 getpid() 等于父进程 tgid，gettid() 是新 tid。
 void
 clone_tgid(char *s)
@@ -989,6 +1039,7 @@ struct test proc_quicktests[] = {
   {clone_tgid, "clone_tgid"},
   {clone_files, "clone_files"},
   {clone_cwd, "clone_cwd"},
+  {clone_vma, "clone_vma"},
   {clone_join, "clone_join"},
   {clone_tls, "clone_tls"},
   {clone_tgkill, "clone_tgkill"},

@@ -716,7 +716,7 @@ sys_pipe(void)
 uint64
 sys_mmap(void)
 {
-  uint64 addr, length, start, end;
+  uint64 addr, length, start;
   int prot, flags, fd, off;
   struct file *f = 0;
   struct inode *ip = 0;
@@ -759,17 +759,8 @@ sys_mmap(void)
   }
 
   npages = PGROUNDUP(length) / PGSIZE;
-  start = vma_alloc(p, npages);
+  start = vma_mmap(p, npages, prot, flags, ip, (uint)off);
   if(start == 0){
-    if(ip){
-      begin_op();
-      iput(ip);
-      end_op();
-    }
-    return -1;
-  }
-  end = start + npages * PGSIZE;
-  if(vma_add(p, start, end, prot, flags, ip, (uint)off) < 0){
     if(ip){
       begin_op();
       iput(ip);

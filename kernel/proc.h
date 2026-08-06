@@ -1,6 +1,7 @@
 // 内核上下文切换时保存的寄存器集合。
 #include "signal.h"
 #include "vma.h"
+#include "sleeplock.h"
 // ra 保存切换后的返回地址，sp 保存内核栈指针；
 // s0-s11 是 callee-saved 寄存器，调用者不负责保留它们，
 // 所以上下文切换必须显式保存和恢复。
@@ -92,6 +93,14 @@ struct proc_files {
   struct inode *cwd;
 };
 
+// 共享的 VMA 表。clone 线程共享同一份，并增加 ref。
+struct proc_vmas {
+  struct sleeplock lock;
+  int ref;
+  uint64 pages[VMA_PAGE_COUNT]; // 每页缓存物理地址，持有一份 cow 引用
+  struct vma vmas[NVMA];
+};
+
 // 进程状态机：
 // UNUSED（空槽位）-> USED（已分配）-> RUNNABLE -> RUNNING，
 // RUNNING 可以因等待资源进入 SLEEPING，或因退出进入 ZOMBIE。
@@ -141,6 +150,6 @@ struct proc {
   struct trapframe *trapframe; // 保存用户寄存器现场的页面
   struct context context;      // 内核上下文，swtch() 保存/恢复
   struct proc_files *files;    // 文件描述符表与 cwd（可被 clone 共享）
-  struct vma vmas[NVMA];       // mmap 虚拟内存区域
+  struct proc_vmas *vmas;      // mmap 虚拟内存区域（可被 clone 共享）
   char name[16];               // 进程名（用于调试输出）
 };

@@ -761,6 +761,39 @@ usertests clone_tgkill
 make test-quick
 ```
 
+## P3 批次十三：clone 共享 VMA 表
+
+状态：已完成
+
+完成内容：
+
+- `struct proc_vmas` 成为带引用计数的共享对象：fork 复制一份，clone 线程共享同一份。
+- VMA 表使用 sleeplock 保护，`mmap` 的地址分配与登记合并为原子操作，
+  并发 `mmap` / `munmap` / 缺页不会破坏描述符表。
+- 每个 VMA 页在共享表中保存缓存物理地址并持有 cow 引用，
+  单个线程退出只解除自己的页表映射，页面生命周期跟随整个线程组。
+- 缺页时优先复用同组页缓存，其他线程退出后仍能看到已写入的数据。
+- `munmap` 和 `exec` 清理会解除所有共享线程页表中的映射，避免残留访问。
+- fork 复制 VMA 时，私有页复制独立页面，共享页继续映射同一物理页；
+  复制出的页面同样登记到新表缓存，保证后续 clone 线程语义一致。
+- 新增 `clone_vma` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/vma.h`、`kernel/vma.c`
+- `kernel/proc.c`、`kernel/defs.h`
+- `kernel/sysfile.c`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_vma
+usertests -q
+make test-quick
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)
