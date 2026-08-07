@@ -50,9 +50,11 @@
 
 ### P3-K2b：shell 作业控制
 
-状态：待开始
+状态：已完成
 
-- shell 支持 `jobs`、`fg`、`bg`、`Ctrl-Z`。
+- shell 支持 `jobs`、`fg`、`bg`、`stop`。
+- `Ctrl-Z` 通过 console 前台进程组投递 `SIGTSTP`，`Ctrl-C` 投递 `SIGINT`。
+- 后台命令创建独立进程组，shell 用 `waitpid_flags` 跟踪停止/继续事件。
 
 ### P3-K3：线程语义收口
 

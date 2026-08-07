@@ -44,6 +44,7 @@ consputc(int c)
 
 struct {
   struct spinlock lock;
+  int fg_pgid;  // 当前终端前台进程组
   
   // input circular buffer
 #define INPUT_BUF_SIZE 128
@@ -52,6 +53,28 @@ struct {
   uint w;  // Write index
   uint e;  // Edit index
 } cons;
+
+int
+console_set_fg(int pgid)
+{
+  if(pgid <= 0)
+    return -1;
+  acquire(&cons.lock);
+  cons.fg_pgid = pgid;
+  release(&cons.lock);
+  return 0;
+}
+
+int
+console_get_fg(void)
+{
+  int pgid;
+
+  acquire(&cons.lock);
+  pgid = cons.fg_pgid;
+  release(&cons.lock);
+  return pgid;
+}
 
 //
 // 用户 write() 到控制台的入口。
@@ -101,6 +124,10 @@ consoleread(struct file *f, int user_dst, uint64 dst, int n)
         return -1;
       }
       sleep(&cons.r, &cons.lock);
+      if(myproc()->stop_pending){
+        release(&cons.lock);
+        return -1;
+      }
     }
 
     c = cons.buf[cons.r++ % INPUT_BUF_SIZE];
@@ -143,6 +170,14 @@ consoleintr(int c)
   acquire(&cons.lock);
 
   switch(c){
+  case C('C'):  // Ctrl-C: 中断前台进程组。
+    if(cons.fg_pgid > 0)
+      kkillpg(cons.fg_pgid, SIGINT);
+    break;
+  case C('Z'):  // Ctrl-Z: 停止前台进程组。
+    if(cons.fg_pgid > 0)
+      kkillpg(cons.fg_pgid, SIGTSTP);
+    break;
   case C('P'):  // Print process list.
     procdump();
     break;
@@ -186,6 +221,7 @@ void
 consoleinit(void)
 {
   initlock(&cons.lock, "cons");
+  cons.fg_pgid = 0;
 
   uartinit();
 

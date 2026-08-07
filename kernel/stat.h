@@ -52,3 +52,4 @@ struct stat {
 
 #define WUNTRACED 1
 #define WCONTINUED 2
+#define WNOHANG 4

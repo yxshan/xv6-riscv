@@ -88,3 +88,5 @@ entry("sigprocmask");
 entry("setpgid");
 entry("getpgid");
 entry("killpg");
+entry("tcsetpgrp");
+entry("tcgetpgrp");

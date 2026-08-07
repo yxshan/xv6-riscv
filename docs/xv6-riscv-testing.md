@@ -281,6 +281,11 @@ P3-K2a 新增回归用例：
 
 - `sig_stop_cont`：子进程被 `SIGSTOP` 停止后 `waitpid_flags` 以 `WUNTRACED`
   返回停止状态，`SIGCONT` 后以 `WCONTINUED` 返回继续事件，子进程随后正常退出。
+- `tc_pgid`：`tcsetpgrp` / `tcgetpgrp` 能设置并读回终端前台进程组。
+
+P3-K2b 新增自动化用例：
+
+- `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。
 
 工具测试新增：
 

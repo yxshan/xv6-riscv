@@ -223,6 +223,7 @@ UPROGS=\
 	$U/_umount\
 	$U/_swapinfo\
 	$U/_aslr\
+	$U/_sleep\
 	$(UMOD_BINS)\
 
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
@@ -288,6 +289,7 @@ host-test:
 test-quick: kernel/kernel fs.img swap.img host-test
 	./test-xv6.py -q usertests
 	./test-xv6.py tools
+	./test-xv6.py jobs
 	./test-xv6.py grind
 	./test-xv6.py modules
 

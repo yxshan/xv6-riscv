@@ -887,6 +887,36 @@ usertests -q
 ./test-xv6.py crash
 ```
 
+## P3-K2b：终端前台进程组与 shell 作业控制
+
+状态：已完成
+
+完成内容：
+
+- console 维护前台进程组，`tcsetpgrp` / `tcgetpgrp` 设置和读取。
+- `Ctrl-C` 向 `SIGINT` 投递前台组，`Ctrl-Z` 向 `SIGTSTP` 投递前台组。
+- shell 为每个命令创建独立进程组，后台任务进入 job table。
+- 支持 `jobs`、`fg`、`bg`、`stop`；`waitpid_flags` 跟踪停止/继续事件。
+- 子进程在 exec 前恢复 `SIGTSTP` / `SIGINT` 默认处理，避免继承 shell 的忽略设置。
+- `consoleread` 在 `stop_pending` 时返回，阻塞进程可被 `Ctrl-Z` 停止。
+
+涉及文件：
+
+- `kernel/console.c`、`kernel/proc.c`、`kernel/defs.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/stat.h`、`kernel/module/module.h`
+- `user/sh.c`、`user/sleep.c`、`user/user.h`、`user/usys.pl`
+- `Makefile`、`test-xv6.py`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_sh user/_sleep fs.img
+./test-xv6.py jobs
+make test-quick
+./test-xv6.py crash
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

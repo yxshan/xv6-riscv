@@ -64,3 +64,5 @@
 #define SYS_getpgid 61
 #define SYS_killpg 62
 #define SYS_waitpid_flags 63
+#define SYS_tcsetpgrp 64
+#define SYS_tcgetpgrp 65

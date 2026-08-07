@@ -324,6 +324,18 @@ def test_tools():
     q.stop()
     print("OK")
 
+def test_jobs():
+    print("Test shell job control")
+    q = QEMU(True)
+    q.cmd("sleep 100000 &\n")
+    q.monitor("^\\[1\\] .* running", timeout=30)
+    q.cmd("stop %1\n")
+    q.monitor("^\\[1\\] .* stopped", timeout=30)
+    q.cmd("bg %1\n")
+    q.monitor("^\\[1\\] .* running", timeout=30)
+    q.stop()
+    print("OK")
+
 def test_grind():
     print("Test grind stress")
     q = QEMU(True)

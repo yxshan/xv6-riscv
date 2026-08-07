@@ -27,6 +27,8 @@ void            bunpin(struct buf*);
 void            consoleinit(void);
 void            consoleintr(int);
 void            consputc(int);
+int             console_set_fg(int);
+int             console_get_fg(void);
 
 // exec.c
 int             kexec(char*, char**);
@@ -135,6 +137,7 @@ pagetable_t     proc_pagetable(struct proc *);
 void            proc_freepagetable(pagetable_t, uint64);
 int             kkill(int);
 int             ktgkill(int, int, int);
+int             kkillpg(int, int);
 int             killed(struct proc*);
 void            setkilled(struct proc*);
 struct cpu*     mycpu(void);

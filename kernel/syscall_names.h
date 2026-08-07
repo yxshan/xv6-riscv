@@ -68,6 +68,8 @@
   X(SYS_sigprocmask, sigprocmask) \
   X(SYS_setpgid, setpgid) \
   X(SYS_getpgid, getpgid) \
-  X(SYS_killpg, killpg)
+  X(SYS_killpg, killpg) \
+  X(SYS_tcsetpgrp, tcsetpgrp) \
+  X(SYS_tcgetpgrp, tcgetpgrp)
 
 #endif

@@ -781,7 +781,7 @@ kwaitpid_flags(int pid, uint64 addr, int options)
   struct proc *p = myproc();
   int found;
 
-  if(pid <= 0 || (options & ~(WUNTRACED | WCONTINUED)))
+  if(pid <= 0 || (options & ~(WUNTRACED | WCONTINUED | WNOHANG)))
     return -1;
 
   acquire(&wait_lock);
@@ -831,6 +831,10 @@ kwaitpid_flags(int pid, uint64 addr, int options)
         }
         release(&pp->lock);
       }
+    }
+    if(options & WNOHANG){
+      release(&wait_lock);
+      return -1;
     }
     if(!found || killed(p)){
       release(&wait_lock);
@@ -1264,6 +1268,29 @@ sys_killpg(void)
   argint(0, &pgrp);
   argint(1, &sig);
   return kkillpg(pgrp, sig);
+}
+
+uint64
+sys_tcsetpgrp(void)
+{
+  int fd, pgid;
+
+  argint(0, &fd);
+  argint(1, &pgid);
+  if(fd < 0)
+    return -1;
+  return console_set_fg(pgid);
+}
+
+uint64
+sys_tcgetpgrp(void)
+{
+  int fd;
+
+  argint(0, &fd);
+  if(fd < 0)
+    return -1;
+  return console_get_fg();
 }
 
 // 周期性优先级提升：按进程静态优先级重新计算目标队列，

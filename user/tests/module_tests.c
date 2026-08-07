@@ -422,6 +422,19 @@ sig_stop_cont(char *s)
   exit(0);
 }
 
+// 终端前台进程组：设置后可通过 tcgetpgrp 读回。
+void
+tc_pgid(char *s)
+{
+  int pgid = getpgid(0);
+
+  if(pgid <= 0 || tcsetpgrp(0, pgid) < 0 || tcgetpgrp(0) != pgid){
+    printf("%s: terminal foreground pgid failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 // clone 线程共享信号处理表：tgkill 精确投递后子线程执行处理器。
 void
 clone_signal(char *s)
@@ -659,6 +672,7 @@ struct test module_quicktests[] = {
   {signal_ignore, "signal_ignore"},
   {signal_default, "signal_default"},
   {sig_stop_cont, "sig_stop_cont"},
+  {tc_pgid, "tc_pgid"},
   {sig_mask, "sig_mask"},
   {clone_signal, "clone_signal"},
   {dynmod_lifecycle, "dynmod_lifecycle"},

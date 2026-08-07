@@ -68,6 +68,8 @@ int sigprocmask(int, uint64*, uint64*);
 int setpgid(int, int);
 int getpgid(int);
 int killpg(int, int);
+int tcsetpgrp(int, int);
+int tcgetpgrp(int);
 
 // ulib.c
 int stat(const char*, struct stat*);
