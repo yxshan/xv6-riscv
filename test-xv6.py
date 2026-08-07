@@ -366,6 +366,8 @@ def test_shell():
     q.monitor(".*two", timeout=30)
     q.cmd("\x1b[A\x1b[B\x1b[3~echo escape\n")
     q.monitor(".*escape", timeout=30)
+    q.cmd("mkdir /d2\ncd /d2\necho hello > file.txt\ncat file.txt\ncd /\nrm /d2/file.txt\nrm /d2\n")
+    q.monitor(".*hello", timeout=30)
     q.stop()
     print("OK")
 

@@ -118,6 +118,15 @@ runcmd(struct cmd *cmd)
     if(ecmd->argv[0] == 0)
       exit(1);
     exec(ecmd->argv[0], ecmd->argv);
+    if(ecmd->argv[0][0] != '/' && !strchr(ecmd->argv[0], '/')){
+      char full[100];
+      int n = strlen(ecmd->argv[0]);
+      if(n + 2 < (int)sizeof(full)){
+        full[0] = '/';
+        memmove(full + 1, ecmd->argv[0], n + 1);
+        exec(full, ecmd->argv);
+      }
+    }
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     exit(1);
 
