@@ -321,6 +321,11 @@ P3-K6 新增回归用例：
 - `pseudo_devices`：`/dev/zero` 返回零字节，`/dev/null` 丢弃写入并返回 EOF。
 - `flock_basic`：共享锁可同时持有，独占锁跨进程互斥，`LOCK_NB` 冲突时立即失败。
 
+P3-K7 新增回归用例：
+
+- `sem_basic`：信号量初值为 0 时子进程阻塞，父进程释放后子进程继续并正确退出。
+- `futex_timeout`：等待值不变化时超时返回，值已变化时立即返回。
+
 P3-K2b 新增自动化用例：
 
 - `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。

@@ -247,6 +247,13 @@ uint64          sys_swapinfo(void);
 void            futexinit(void);
 uint64          sys_futex_wait(void);
 uint64          sys_futex_wake(void);
+uint64          sys_futex_wait_timeout(void);
+
+// sem.c
+void            seminit(void);
+uint64          sys_semget(void);
+uint64          sys_semop(void);
+uint64          sys_semctl(void);
 
 void            module_notify_tick(void);
 void            module_notify_syscall_enter(int);

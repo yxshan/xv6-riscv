@@ -82,3 +82,7 @@
 #define SYS_select 79
 #define SYS_mprotect 80
 #define SYS_flock 81
+#define SYS_semget 82
+#define SYS_semop 83
+#define SYS_semctl 84
+#define SYS_futex_wait_timeout 85

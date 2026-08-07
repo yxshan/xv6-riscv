@@ -108,9 +108,13 @@
 
 ### P3-K7：IPC 与模块基础设施
 
-状态：待开始
+状态：部分完成
 
-- 信号量、futex 超时/robust 语义、内核符号导出表、模块参数/依赖。
+- 新增 System V 风格信号量：`semget` / `semop` / `semctl`，支持
+  `IPC_CREAT`、`IPC_NOWAIT`、`GETVAL`、`SETVAL`、`IPC_RMID`。
+- 新增 `futex_wait_timeout`，超时后返回失败，值不匹配时立即返回。
+- 内核符号导出表、模块参数/依赖、卸载安全检查待下一批补充。
+- 新增 `sem_basic`、`futex_timeout` 回归测试。
 
 ### P3-K8：设备与时钟
 

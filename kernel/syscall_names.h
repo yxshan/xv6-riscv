@@ -86,6 +86,10 @@
   X(SYS_poll, poll) \
   X(SYS_select, select) \
   X(SYS_mprotect, mprotect) \
-  X(SYS_flock, flock)
+  X(SYS_flock, flock) \
+  X(SYS_semget, semget) \
+  X(SYS_semop, semop) \
+  X(SYS_semctl, semctl) \
+  X(SYS_futex_wait_timeout, futex_wait_timeout)
 
 #endif

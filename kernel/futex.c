@@ -64,3 +64,72 @@ sys_futex_wake(void)
   release(&futex_lock);
   return 0;
 }
+
+static uint
+futex_ticks(void)
+{
+  uint t;
+
+  acquire(&tickslock);
+  t = ticks;
+  release(&tickslock);
+  return t;
+}
+
+uint64
+sys_futex_wait_timeout(void)
+{
+  struct proc *p = myproc();
+  uint64 addr;
+  int expect, timeout_ms, val;
+  uint64 pa;
+  uint start, need;
+
+  argaddr(0, &addr);
+  argint(1, &expect);
+  argint(2, &timeout_ms);
+  if(addr == 0 || addr >= MAXVA || timeout_ms < 0)
+    return -1;
+
+  acquire(&futex_lock);
+  pa = walkaddr(p->pagetable, addr);
+  if(pa == 0){
+    release(&futex_lock);
+    return -1;
+  }
+  val = *(int*)pa;
+  if(val != expect){
+    release(&futex_lock);
+    return 0;
+  }
+  if(timeout_ms == 0){
+    release(&futex_lock);
+    return -1;
+  }
+  release(&futex_lock);
+
+  need = (uint)((timeout_ms + 99) / 100);
+  start = futex_ticks();
+  while(futex_ticks() - start < need){
+    if(killed(p) || p->stop_pending){
+      return -1;
+    }
+    acquire(&tickslock);
+    sleep(&ticks, &tickslock);
+    release(&tickslock);
+
+    acquire(&futex_lock);
+    pa = walkaddr(p->pagetable, addr);
+    if(pa == 0){
+      release(&futex_lock);
+      return -1;
+    }
+    val = *(int*)pa;
+    if(val != expect){
+      release(&futex_lock);
+      return 0;
+    }
+    release(&futex_lock);
+  }
+  return -1;
+}

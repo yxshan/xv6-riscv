@@ -28,6 +28,7 @@ OBJS = \
   $K/mount.o \
   $K/swap.o \
   $K/futex.o \
+  $K/sem.o \
   $K/log.o \
   $K/sleeplock.o \
   $K/file.o \

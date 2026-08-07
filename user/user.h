@@ -3,6 +3,7 @@
 #include "kernel/time.h"
 #include "kernel/uio.h"
 #include "kernel/poll.h"
+#include "kernel/sem.h"
 
 #define SBRK_ERROR ((char *)-1)
 
@@ -34,6 +35,9 @@ int getcwd(char*, int);
 int chroot(const char*);
 int fsync(int);
 int flock(int, int);
+int semget(int, int, int);
+int semop(int, const struct sembuf*, int);
+int semctl(int, int, int, int);
 int nanosleep(const struct timespec*, struct timespec*);
 int clock_gettime(int, struct timespec*);
 int readv(int, const struct iovec*, int);
@@ -80,6 +84,7 @@ int clone(uint64, uint64, uint64, uint64, uint64);
 int thread_create(void (*)(void*), void*, void*);
 int futex_wait(uint64, int);
 int futex_wake(uint64, int);
+int futex_wait_timeout(uint64, int, int);
 int gettid(void);
 int waitpid(int, int*);
 int waitpid_flags(int, int*, int);
