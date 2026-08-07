@@ -339,6 +339,8 @@ def test_jobs():
     q.monitor("^\\[1\\] .* stopped", timeout=30)
     q.cmd("bg %1\n")
     q.monitor("^\\[1\\] .* running", timeout=30)
+    q.cmd("jobs\n")
+    q.monitor("^\\[1\\] .* running", timeout=30)
     q.stop()
     print("OK")
 
