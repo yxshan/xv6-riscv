@@ -513,6 +513,13 @@ dynmod_lifecycle(char *s)
     free(buf);
     exit(1);
   }
+  if(module_call(KMOD_DYN_SAMPLE, 3, 0, 0) != 7 ||
+     module_call(KMOD_DYN_SAMPLE, 4, 42, 0) != 42 ||
+     module_call(KMOD_DYN_SAMPLE, 3, 0, 0) != 42){
+    printf("%s: module param failed\n", s);
+    free(buf);
+    exit(1);
+  }
   if(module_unload(0) != 0){
     printf("%s: module_unload failed\n", s);
     free(buf);

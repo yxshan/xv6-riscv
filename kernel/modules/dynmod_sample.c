@@ -8,6 +8,7 @@
 #include "module_ids.h"
 
 static int (*gprintf)(char *fmt, ...);
+static kmod_u64 gparam = 7;
 
 static void
 dyn_exit_fn(void)
@@ -27,6 +28,11 @@ dyn_handler(int cmd, kmod_u64 arg0, kmod_u64 arg1)
     return 0x1234;
   case 2:
     return 0x5678;
+  case 3:
+    return gparam;
+  case 4:
+    gparam = arg0;
+    return gparam;
   default:
     return -1;
   }
@@ -38,6 +44,8 @@ module_entry(struct kmod_api *api)
 {
   gprintf = api->printf;
   int r = api->module_register(KMOD_DYN_SAMPLE, "dynmod", dyn_handler);
+  if(r == 0 && api->param_register("sample_value", &gparam) != 0)
+    r = -1;
   if(r == 0 && api->module_exit_register(dyn_exit_fn) != 0)
     r = -1;
   if(r == 0)

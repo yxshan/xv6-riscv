@@ -46,6 +46,14 @@ struct dynslot {
 };
 static struct dynslot dynslots[DYNMOD_NUM];
 
+struct kmod_param {
+  int used;
+  int slot;
+  char name[32];
+  void *ptr;
+};
+static struct kmod_param kparams[KMOD_MAX_PARAMS];
+
 #define ET_EXEC 2
 #define EM_RISCV 243
 
@@ -220,6 +228,48 @@ module_release(int id)
   }
   release(&dynlock);
   return -1;
+}
+
+int
+module_param_register(const char *name, void *ptr)
+{
+  if(name == 0 || ptr == 0 || current_dynslot <= 0 ||
+     current_dynslot > DYNMOD_NUM)
+    return -1;
+  acquire(&dynlock);
+  for(int i = 0; i < KMOD_MAX_PARAMS; i++){
+    if(kparams[i].used && kparams[i].slot == current_dynslot &&
+       kmod_streq(kparams[i].name, name)){
+      release(&dynlock);
+      return -1;
+    }
+  }
+  for(int i = 0; i < KMOD_MAX_PARAMS; i++){
+    if(!kparams[i].used){
+      kparams[i].used = 1;
+      kparams[i].slot = current_dynslot;
+      safestrcpy(kparams[i].name, name, sizeof(kparams[i].name));
+      kparams[i].ptr = ptr;
+      release(&dynlock);
+      return 0;
+    }
+  }
+  release(&dynlock);
+  return -1;
+}
+
+static void
+module_param_clear_slot(int slot)
+{
+  acquire(&dynlock);
+  for(int i = 0; i < KMOD_MAX_PARAMS; i++){
+    if(kparams[i].used && kparams[i].slot == slot){
+      kparams[i].used = 0;
+      kparams[i].name[0] = 0;
+      kparams[i].ptr = 0;
+    }
+  }
+  release(&dynlock);
 }
 
 int
@@ -444,6 +494,7 @@ module_load_elf(uint64 src, int len, uint64 base)
   api.lookup_symbol = module_lookup_symbol;
   api.module_require = module_require;
   api.module_release = module_release;
+  api.param_register = module_param_register;
 
   r = ((int (*)(struct kmod_api*))entry)(&api);
   return r;
@@ -476,6 +527,7 @@ module_load(uint64 src, int len)
     dynslots[slot].used = 0;
     dynslots[slot].refs = 0;
     dynslots[slot].exit = 0;
+    module_param_clear_slot(slot + 1);
     current_dynslot = 0;
     memset((void*)base, 0, DYNMOD_SIZE);
     return -1;
@@ -506,6 +558,7 @@ module_unload(int slot)
   dynslots[slot].used = 0;
   dynslots[slot].refs = 0;
   dynslots[slot].exit = 0;
+  module_param_clear_slot(slot + 1);
   memset((void*)base, 0, DYNMOD_SIZE);
   return 0;
 }

@@ -7,6 +7,7 @@
 #define KMOD_MAX_HOOKS 32
 #define KMOD_MAX_SYSCOUNTS 96
 #define KMOD_MAX_DYNAMIC 8
+#define KMOD_MAX_PARAMS 32
 #define KMOD_PRIORITY_DEFAULT 100
 
 struct proc;
