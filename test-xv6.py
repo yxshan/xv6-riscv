@@ -364,6 +364,8 @@ def test_shell():
     q.cmd("echo one && echo two\n")
     q.monitor(".*one", timeout=30)
     q.monitor(".*two", timeout=30)
+    q.cmd("\x1b[A\x1b[3~echo escape\n")
+    q.monitor(".*escape", timeout=30)
     q.stop()
     print("OK")
 

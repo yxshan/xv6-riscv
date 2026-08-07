@@ -52,6 +52,8 @@ struct {
   uint r;  // Read index
   uint w;  // Write index
   uint e;  // Edit index
+  int esc;           // 正在接收终端转义序列
+  int esc_bracket;   // 已收到 ESC [
 } cons;
 
 int
@@ -169,6 +171,30 @@ consoleintr(int c)
 {
   acquire(&cons.lock);
 
+  // 吞掉方向键/Delete 等终端转义序列，避免被当作普通字符回显和写入缓冲区。
+  if(cons.esc){
+    if(c == '['){
+      cons.esc_bracket = 1;
+      release(&cons.lock);
+      return;
+    }
+    if(cons.esc_bracket &&
+       ((c >= '0' && c <= '9') || c == ';' || c == '?')){
+      release(&cons.lock);
+      return;
+    }
+    cons.esc = 0;
+    cons.esc_bracket = 0;
+    release(&cons.lock);
+    return;
+  }
+  if(c == 0x1b){
+    cons.esc = 1;
+    cons.esc_bracket = 0;
+    release(&cons.lock);
+    return;
+  }
+
   switch(c){
   case C('C'):  // Ctrl-C: 中断前台进程组。
     if(cons.fg_pgid > 0)
@@ -222,6 +248,8 @@ consoleinit(void)
 {
   initlock(&cons.lock, "cons");
   cons.fg_pgid = 0;
+  cons.esc = 0;
+  cons.esc_bracket = 0;
 
   uartinit();
 
