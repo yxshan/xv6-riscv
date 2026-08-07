@@ -38,5 +38,7 @@ extern struct test perm_quicktests[];
 extern struct test perm_slowtests[];
 extern struct test mmap_quicktests[];
 extern struct test mmap_slowtests[];
+extern struct test thread_quicktests[];
+extern struct test thread_slowtests[];
 
 #endif

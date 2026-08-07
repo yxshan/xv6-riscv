@@ -173,5 +173,6 @@ extern void clone_stub(void);
 int
 thread_create(void (*fn)(void*), void *arg, void *stack)
 {
-  return clone((uint64)fn, (uint64)arg, (uint64)stack, (uint64)clone_stub);
+  return clone(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_THREAD,
+               (uint64)fn, (uint64)arg, (uint64)stack, (uint64)clone_stub);
 }

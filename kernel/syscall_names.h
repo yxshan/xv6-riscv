@@ -70,6 +70,7 @@
   X(SYS_getpgid, getpgid) \
   X(SYS_killpg, killpg) \
   X(SYS_tcsetpgrp, tcsetpgrp) \
-  X(SYS_tcgetpgrp, tcgetpgrp)
+  X(SYS_tcgetpgrp, tcgetpgrp) \
+  X(SYS_exit_group, exit_group)
 
 #endif

@@ -283,6 +283,18 @@ P3-K2a 新增回归用例：
   返回停止状态，`SIGCONT` 后以 `WCONTINUED` 返回继续事件，子进程随后正常退出。
 - `tc_pgid`：`tcsetpgrp` / `tcgetpgrp` 能设置并读回终端前台进程组。
 
+P3-K3 新增回归用例：
+
+- `clone_flags_files`：`CLONE_FILES` 共享 fd 表但不共享地址空间。
+- `clone_flags_fs`：`CLONE_FS` 共享 cwd 但保留独立 fd 表。
+- `clone_flags_vm`：`CLONE_VM` 共享地址空间但不加入线程组。
+- `clone_thread_fork`：非组长线程调用 `fork` 时，子进程只包含调用线程，
+  `getpid() == gettid()` 且获得新线程组。
+- `exit_group_basic`：非组长线程调用 `exit_group(7)` 后整个线程组退出，
+  父进程 wait 到状态 7。
+- `exec_thread_cleanup`：线程调用 `exec` 成功后其他线程被终止，
+  新程序作为单线程进程运行并正确输出。
+
 P3-K2b 新增自动化用例：
 
 - `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。

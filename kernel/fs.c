@@ -785,7 +785,7 @@ namex(char *path, int nameiparent, char *name)
   if(*path == '/')
     ip = iget(ROOTDEV, ROOTINO);
   else
-    ip = idup(myproc()->files->cwd);
+    ip = idup(myproc()->fs->cwd);
 
   while((path = skipelem(path, name)) != 0){
     // 上一步解析到的可能是挂载点，先切换到被挂载文件系统的根。

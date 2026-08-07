@@ -84,12 +84,19 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
-// 共享的文件描述符表与文件系统上下文。
-// 普通进程各自持有一份；clone 线程共享同一份，并增加 ref。
+// 共享的文件描述符表。
+// 普通进程各自持有一份；clone 线程可共享，并增加 ref。
 struct proc_files {
   struct spinlock lock;
   int ref;
   struct file *ofile[NOFILE];
+};
+
+// 共享的文件系统上下文：当前工作目录。
+// 与文件描述符表分开，使 CLONE_FILES 和 CLONE_FS 可以独立生效。
+struct proc_fs {
+  struct spinlock lock;
+  int ref;
   struct inode *cwd;
 };
 
@@ -98,6 +105,7 @@ struct proc_files {
 struct proc_sig {
   struct spinlock lock;
   int ref;
+  int exiting;                 // 线程组退出流程已开始，避免重复等待
   uint64 handlers[NSIG]; // 信号处理函数表
   uint64 pending;        // 线程组待处理信号
 };
@@ -162,7 +170,8 @@ struct proc {
   pagetable_t pagetable;       // 用户页表
   struct trapframe *trapframe; // 保存用户寄存器现场的页面
   struct context context;      // 内核上下文，swtch() 保存/恢复
-  struct proc_files *files;    // 文件描述符表与 cwd（可被 clone 共享）
+  struct proc_files *files;    // 文件描述符表（可被 clone 共享）
+  struct proc_fs *fs;          // 文件系统上下文，cwd（可被 clone 共享）
   struct proc_vmas *vmas;      // mmap 虚拟内存区域（可被 clone 共享）
   char name[16];               // 进程名（用于调试输出）
 };

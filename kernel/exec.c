@@ -110,9 +110,6 @@ kexec(char *path, char **argv)
   p = myproc();
   uint64 oldsz = p->sz;
 
-  // exec 成功提交前释放旧进程的 mmap 区域。
-  vma_clear(p);
-
   // 在段结束处分配用户栈页。
   // 最上面一页不设置 PTE_U，作为保护页捕获栈溢出；
   // 其余页作为用户栈。
@@ -158,7 +155,11 @@ kexec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
-    
+
+  // 新镜像已完整构建：终止同组其他线程，并释放旧进程的 mmap 区域。
+  kexec_thread_cleanup();
+  vma_clear(p);
+
   // 原子提交：换上新的用户页表、大小、入口 PC 和栈指针，
   // 然后释放旧用户镜像。
   oldpagetable = p->pagetable;

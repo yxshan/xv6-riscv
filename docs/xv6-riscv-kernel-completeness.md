@@ -58,11 +58,15 @@
 
 ### P3-K3：线程语义收口
 
-状态：待开始
+状态：已完成
 
-- `clone` 支持 `CLONE_VM` / `CLONE_FILES` / `CLONE_FS` / `CLONE_THREAD`。
-- 新增 `exit_group`。
-- 多线程 `fork` 只复制调用线程；多线程 `exec` 终止其余线程。
+- `clone` 支持 `CLONE_VM` / `CLONE_FILES` / `CLONE_FS` / `CLONE_THREAD`，
+  文件描述符表与 `cwd` 拆为独立共享对象，各 flag 可以分别生效。
+- 新增 `exit_group`，组内任意线程调用后终止整个线程组，并保留退出状态。
+- 多线程 `fork` 只复制调用线程；多线程 `exec` 在成功提交新镜像前终止其余线程，
+  失败时保留线程组。
+- 新增 `clone_flags_files`、`clone_flags_fs`、`clone_flags_vm`、
+  `clone_thread_fork`、`exit_group_basic`、`exec_thread_cleanup` 回归测试。
 
 ### P3-K4：信号完整性
 

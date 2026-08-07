@@ -630,9 +630,9 @@ sys_chdir(void)
   }
   // 释放旧 cwd 的引用，换用新目录的引用。
   iunlock(ip);
-  iput(p->files->cwd);
+  iput(p->fs->cwd);
   end_op();
-  p->files->cwd = ip;
+  p->fs->cwd = ip;
   return 0;
 }
 

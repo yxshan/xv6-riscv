@@ -15,3 +15,9 @@
 #define FSSIZE       4096  // size of file system in blocks
 #define MAXPATH      128   // maximum file path name
 #define USERSTACK    1     // user stack pages
+
+// clone 系统调用 flags，取值与 Linux 常用位保持一致。
+#define CLONE_VM       0x00000100  // 共享地址空间
+#define CLONE_FS       0x00000200  // 共享文件系统上下文（cwd）
+#define CLONE_FILES    0x00000400  // 共享文件描述符表
+#define CLONE_THREAD   0x00010000  // 加入调用者的线程组

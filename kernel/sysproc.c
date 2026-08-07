@@ -22,6 +22,16 @@ sys_exit(void)
 }
 
 uint64
+sys_exit_group(void)
+{
+  int n;
+
+  argint(0, &n);
+  kexit_group(n);
+  return 0;  // not reached
+}
+
+uint64
 sys_getpid(void)
 {
   // getpid 返回线程组 ID；普通进程等于 pid。
@@ -135,13 +145,14 @@ sys_fork(void)
 uint64
 sys_clone(void)
 {
-  uint64 fn, arg, stack, stub;
+  uint64 flags, fn, arg, stack, stub;
 
-  argaddr(0, &fn);
-  argaddr(1, &arg);
-  argaddr(2, &stack);
-  argaddr(3, &stub);
-  return kclone(fn, arg, stack, stub);
+  argaddr(0, &flags);
+  argaddr(1, &fn);
+  argaddr(2, &arg);
+  argaddr(3, &stack);
+  argaddr(4, &stub);
+  return kclone(flags, fn, arg, stack, stub);
 }
 
 uint64

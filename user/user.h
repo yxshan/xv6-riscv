@@ -1,3 +1,5 @@
+#include "kernel/param.h"
+
 #define SBRK_ERROR ((char *)-1)
 
 struct stat;
@@ -6,6 +8,7 @@ struct swapinfo;
 // system calls
 int fork(void);
 int exit(int) __attribute__((noreturn));
+void exit_group(int) __attribute__((noreturn));
 int wait(int*);
 int pipe(int*);
 int write(int, const void*, int);
@@ -54,7 +57,7 @@ int mount(int, const char*);
 int umount(const char*);
 int swapout(void);
 int swapinfo(struct swapinfo*);
-int clone(uint64, uint64, uint64, uint64);
+int clone(uint64, uint64, uint64, uint64, uint64);
 int thread_create(void (*)(void*), void*, void*);
 int futex_wait(uint64, int);
 int futex_wake(uint64, int);

@@ -60,11 +60,10 @@ proc_files_copy(struct proc_files *dst, struct proc_files *src)
   for(int i = 0; i < NOFILE; i++)
     if(src->ofile[i])
       dst->ofile[i] = filedup(src->ofile[i]);
-  dst->cwd = idup(src->cwd);
   release(&src->lock);
 }
 
-// 释放一个文件上下文引用；最后一个引用关闭所有 fd 和 cwd。
+// 释放一个文件描述符表引用；最后一个引用关闭所有 fd。
 void
 proc_files_release(struct proc_files *pf)
 {
@@ -83,12 +82,60 @@ proc_files_release(struct proc_files *pf)
     if(pf->ofile[i])
       fileclose(pf->ofile[i]);
   }
-  if(pf->cwd){
+  kfree(pf);
+}
+
+struct proc_fs*
+proc_fs_alloc(void)
+{
+  struct proc_fs *pfs = kalloc();
+
+  if(pfs == 0)
+    return 0;
+  memset(pfs, 0, PGSIZE);
+  initlock(&pfs->lock, "proc_fs");
+  pfs->ref = 1;
+  return pfs;
+}
+
+void
+proc_fs_share(struct proc_fs *pfs)
+{
+  acquire(&pfs->lock);
+  pfs->ref++;
+  release(&pfs->lock);
+}
+
+// fork 时复制 cwd；inode 引用单独持有。
+void
+proc_fs_copy(struct proc_fs *dst, struct proc_fs *src)
+{
+  acquire(&src->lock);
+  dst->cwd = idup(src->cwd);
+  release(&src->lock);
+}
+
+// 释放一个文件系统上下文引用；最后一个引用释放 cwd。
+void
+proc_fs_release(struct proc_fs *pfs)
+{
+  int last = 0;
+
+  if(pfs == 0)
+    return;
+  acquire(&pfs->lock);
+  if(--pfs->ref == 0)
+    last = 1;
+  release(&pfs->lock);
+  if(!last)
+    return;
+
+  if(pfs->cwd){
     begin_op();
-    iput(pf->cwd);
+    iput(pfs->cwd);
     end_op();
   }
-  kfree(pf);
+  kfree(pfs);
 }
 
 // 从全局文件表分配一个 struct file，并把引用计数置为 1。

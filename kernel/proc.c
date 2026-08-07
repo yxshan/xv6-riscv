@@ -200,6 +200,7 @@ found:
   p->kthread_fn = 0;
   p->kthread_arg = 0;
   p->files = 0;
+  p->fs = 0;
   p->uid = 0;
   p->euid = 0;
   p->gid = 0;
@@ -258,7 +259,10 @@ freeproc(struct proc *p)
   p->is_kthread = 0;
   p->kthread_fn = 0;
   p->kthread_arg = 0;
+  proc_files_release(p->files);
   p->files = 0;
+  proc_fs_release(p->fs);
+  p->fs = 0;
   p->vmas = 0;
   p->sig = 0;
   p->parent = 0;
@@ -333,7 +337,10 @@ userinit(void)
   p->files = proc_files_alloc();
   if(p->files == 0)
     panic("proc_files_alloc");
-  p->files->cwd = namei("/");
+  p->fs = proc_fs_alloc();
+  if(p->fs == 0)
+    panic("proc_fs_alloc");
+  p->fs->cwd = namei("/");
   p->vmas = proc_vmas_alloc();
   if(p->vmas == 0)
     panic("proc_vmas_alloc");
@@ -384,6 +391,12 @@ kfork(void)
     return -1;
   }
 
+  if(p->files == 0 || p->fs == 0 || p->vmas == 0 || p->sig == 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+
   np->vmas = proc_vmas_alloc();
   if(np->vmas == 0){
     freeproc(np);
@@ -427,11 +440,19 @@ kfork(void)
     return -1;
   }
   proc_files_copy(np->files, p->files);
+
+  // fork 得到独立文件系统上下文，但 cwd 指向同一目录 inode。
+  np->fs = proc_fs_alloc();
+  if(np->fs == 0){
+    acquire(&np->lock);
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  proc_fs_copy(np->fs, p->fs);
+
   np->sig = proc_sig_alloc();
   if(np->sig == 0){
-    proc_files_release(np->files);
-    np->files = 0;
-    proc_vmas_release(np);
     acquire(&np->lock);
     freeproc(np);
     release(&np->lock);
@@ -471,27 +492,35 @@ kfork(void)
 // 新线程拥有独立 trapframe、内核栈和页表根，但叶页映射同一物理页。
 // 子线程从用户库 clone_stub 开始执行 fn(arg)，不依赖父进程栈。
 int
-kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
+kclone(uint64 flags, uint64 fn, uint64 arg, uint64 stack, uint64 stub)
 {
   struct proc *np;
   struct proc *p = myproc();
   int pid;
 
   if(stack == 0 || stack >= MAXVA || stack % 16 != 0 ||
-     fn == 0 || fn >= MAXVA || stub == 0 || stub >= MAXVA)
+     fn == 0 || fn >= MAXVA || stub == 0 || stub >= MAXVA ||
+     (flags & ~(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_THREAD)) != 0)
+    return -1;
+  if((flags & CLONE_THREAD) && !(flags & CLONE_VM))
     return -1;
 
   if((np = allocproc()) == 0)
     return -1;
 
-  if(p->vmas == 0 || p->sig == 0){
+  if(p->vmas == 0 || p->sig == 0 || p->files == 0 || p->fs == 0){
     freeproc(np);
     release(&np->lock);
     return -1;
   }
   release(&np->lock);
 
-  if(uvmshare(p->pagetable, np->pagetable, p->sz) < 0){
+  int r = 0;
+  if(flags & CLONE_VM)
+    r = uvmshare(p->pagetable, np->pagetable, p->sz);
+  else
+    r = uvmcopy(p->pagetable, np->pagetable, p->sz);
+  if(r < 0){
     acquire(&np->lock);
     freeproc(np);
     release(&np->lock);
@@ -506,13 +535,64 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   np->trapframe->a1 = arg;
   np->trapframe->sp = stack;
 
-  // clone 线程共享父进程的文件描述符表和 cwd。
-  np->files = p->files;
-  proc_files_share(p->files);
-  np->vmas = p->vmas;
-  proc_vmas_share(p->vmas);
-  np->sig = p->sig;
-  proc_sig_share(p->sig);
+  // VMA 表与地址空间语义保持一致：CLONE_VM 共享，否则复制。
+  if(flags & CLONE_VM){
+    np->vmas = p->vmas;
+    proc_vmas_share(p->vmas);
+  } else {
+    np->vmas = proc_vmas_alloc();
+    if(np->vmas == 0 || vma_copy(np, p) < 0){
+      acquire(&np->lock);
+      freeproc(np);
+      release(&np->lock);
+      return -1;
+    }
+  }
+
+  // CLONE_FILES 共享文件描述符表，否则复制一份。
+  if(flags & CLONE_FILES){
+    np->files = p->files;
+    proc_files_share(p->files);
+  } else {
+    np->files = proc_files_alloc();
+    if(np->files == 0){
+      acquire(&np->lock);
+      freeproc(np);
+      release(&np->lock);
+      return -1;
+    }
+    proc_files_copy(np->files, p->files);
+  }
+
+  // CLONE_FS 共享 cwd，否则复制一份文件系统上下文。
+  if(flags & CLONE_FS){
+    np->fs = p->fs;
+    proc_fs_share(p->fs);
+  } else {
+    np->fs = proc_fs_alloc();
+    if(np->fs == 0){
+      acquire(&np->lock);
+      freeproc(np);
+      release(&np->lock);
+      return -1;
+    }
+    proc_fs_copy(np->fs, p->fs);
+  }
+
+  // CLONE_THREAD 加入调用者线程组，并共享信号处理状态。
+  if(flags & CLONE_THREAD){
+    np->sig = p->sig;
+    proc_sig_share(p->sig);
+  } else {
+    np->sig = proc_sig_alloc();
+    if(np->sig == 0){
+      acquire(&np->lock);
+      freeproc(np);
+      release(&np->lock);
+      return -1;
+    }
+    proc_sig_copy(np->sig, p->sig);
+  }
   np->sigblocked = p->sigblocked;
 
   safestrcpy(np->name, p->name, sizeof(p->name));
@@ -525,9 +605,12 @@ kclone(uint64 fn, uint64 arg, uint64 stack, uint64 stub)
   np->egid = p->egid;
   np->umask = p->umask;
 
-  np->tgid = p->tgid;
-  np->pgid = p->pgid;
   pid = np->pid;
+  if(flags & CLONE_THREAD)
+    np->tgid = p->tgid;
+  else
+    np->tgid = pid;
+  np->pgid = p->pgid;
 
   acquire(&wait_lock);
   np->parent = p;
@@ -590,6 +673,7 @@ kthread_create(void (*fn)(void*), void *arg)
     p->trapframe = 0;
     p->pagetable = 0;
     p->files = 0;
+    p->fs = 0;
     p->vmas = 0;
     p->sig = 0;
     p->sz = 0;
@@ -633,12 +717,23 @@ reparent(struct proc *p)
   }
 }
 
-// 线程组组长退出时，终止并回收同 tgid 的其余线程。
-// 调用者必须是组组长（tgid == pid），且尚未释放共享资源。
+// 终止并回收同 tgid 的其他线程。
+// 组内任意线程都可以调用；exiting 标志保证并发退出时只有一个
+// 线程执行等待回收，其余线程直接进入 ZOMBIE。
 static void
 thread_group_exit(struct proc *p)
 {
   struct proc *q;
+  int already = 0;
+
+  acquire(&p->sig->lock);
+  if(p->sig->exiting)
+    already = 1;
+  else
+    p->sig->exiting = 1;
+  release(&p->sig->lock);
+  if(already)
+    return;
 
   // 先标记所有兄弟线程 killed，并唤醒睡眠中的线程。
   for(q = proc; q < &proc[NPROC]; q++){
@@ -666,7 +761,7 @@ thread_group_exit(struct proc *p)
         break;
       }
       release(&q->lock);
-      sleep(p, &wait_lock);
+      sleep(p->sig, &wait_lock);
     }
     release(&wait_lock);
   }
@@ -679,21 +774,22 @@ void
 kexit(int status)
 {
   struct proc *p = myproc();
+  struct proc_sig *sig = p->sig;
 
   if(p == initproc)
     panic("init exiting");
 
-  // 组长退出即整个线程组退出。
-  if(p->tgid == p->pid)
+  // 组长退出即整个线程组退出；内核线程没有共享信号状态，直接退出。
+  if(p->tgid == p->pid && p->sig != 0)
     thread_group_exit(p);
 
-  // 最后一个线程/进程退出时关闭共享文件表与 cwd。
+  // 最后一个线程/进程退出时关闭共享文件表、cwd 与地址空间资源。
   proc_files_release(p->files);
   p->files = 0;
+  proc_fs_release(p->fs);
+  p->fs = 0;
 
   proc_vmas_release(p);
-  proc_sig_release(p->sig);
-  p->sig = 0;
 
   acquire(&wait_lock);
 
@@ -708,6 +804,11 @@ kexit(int status)
   p->xstate = status;
   p->state = ZOMBIE;
 
+  // 唤醒正在等待同组线程回收的线程。
+  if(sig)
+    wakeup(sig);
+  proc_sig_release(sig);
+  p->sig = 0;
   module_notify_proc_exit(p);
 
   release(&wait_lock);
@@ -715,6 +816,69 @@ kexit(int status)
   // 切换到调度器，之后不再回到本进程。
   sched();
   panic("zombie exit");
+}
+
+// exit_group：终止整个线程组。
+// 由组内任意线程调用，成功后当前线程成为新组长并以 status 退出。
+void
+kexit_group(int status)
+{
+  struct proc *p = myproc();
+  struct proc *q;
+
+  if(p->sig == 0){
+    kexit(status);
+    return;
+  }
+
+  // 非组长调用 exit_group 时，把当前线程托管给原组长所在的父进程，
+  // 这样父进程仍能 wait 到整个线程组的退出状态。
+  if(p->tgid != p->pid){
+    acquire(&wait_lock);
+    for(q = proc; q < &proc[NPROC]; q++){
+      if(q->state != UNUSED && q->pid == p->tgid){
+        p->parent = q->parent;
+        break;
+      }
+    }
+    release(&wait_lock);
+  }
+
+  thread_group_exit(p);
+  p->tgid = p->pid;
+  kexit(status);
+}
+
+// exec 前的线程组清理：终止其他线程，让当前线程成为新的组长。
+// 只有 exec 已确认成功后才会调用，失败路径不会破坏线程组。
+void
+kexec_thread_cleanup(void)
+{
+  struct proc *p = myproc();
+  struct proc *q;
+
+  if(p->sig == 0)
+    return;
+
+  // 非组长线程 exec 后成为新组长，父进程也改为原组长所在父进程。
+  if(p->tgid != p->pid){
+    acquire(&wait_lock);
+    for(q = proc; q < &proc[NPROC]; q++){
+      if(q->state != UNUSED && q->pid == p->tgid){
+        p->parent = q->parent;
+        break;
+      }
+    }
+    release(&wait_lock);
+  }
+
+  thread_group_exit(p);
+  p->tgid = p->pid;
+
+  // 线程组已变为单线程，后续 clone 应重新获得正常组退出语义。
+  acquire(&p->sig->lock);
+  p->sig->exiting = 0;
+  release(&p->sig->lock);
 }
 
 // wait 的内核实现：等待一个子进程退出并回收其资源，

@@ -66,3 +66,4 @@
 #define SYS_waitpid_flags 63
 #define SYS_tcsetpgrp 64
 #define SYS_tcgetpgrp 65
+#define SYS_exit_group 66
