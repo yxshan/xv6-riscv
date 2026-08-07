@@ -15,6 +15,10 @@
 - `test-xv6.py` 的 QEMU 输出读取为非阻塞，`monitor` 超时不会被无输出卡死。
 - `usertests` 驱动为每个测试增加 300 tick 的单测超时；超时后终止该测试并标记
   `TIMEOUT`，避免单个用例挂起拖垮整个阶段。
+- 日志崩溃测试不再依赖随机时序：`logstress stall f0 f1 f2 f3` 会先创建全部
+  目标文件，再通过 selftest 模块开启 100 tick 的日志提交停顿；内核在写盘日志头
+  之后、回放数据块之前暂停，`test-xv6.py` 看到 `log commit stalled` 后杀掉 QEMU，
+  因此每次都能进入 `recovering` 恢复路径。
 - `./test-xv6.py shell` 覆盖 shell 历史、变量、别名和 `||` 逻辑或。
 - 方向键与 Delete 的终端转义序列会被 console 吞掉，不回显、不进入输入缓冲区。
 - 上/下方向键由 console 转换为历史编辑键，shell 在提示符下切换历史命令。

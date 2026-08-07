@@ -33,9 +33,11 @@ struct {
 } trans;
 
 static int transinit;
+static int commit_stall;
 
 static void recover_from_log(struct log *log);
 static void commit(struct log *log);
+static void log_maybe_stall(void);
 
 void
 initlog(int dev, struct superblock *sb)
@@ -187,10 +189,33 @@ commit(struct log *log)
   if(log->lh.n > 0){
     write_log(log);
     write_head(log);
+    log_maybe_stall();
     install_trans(0, log);
     log->lh.n = 0;
     write_head(log);
   }
+}
+
+// 仅供 crash 测试使用：在日志头提交后、数据块回写前暂停，
+// 让自动化测试能稳定命中“已提交但未安装”的恢复窗口。
+void
+log_set_commit_stall(int ticks0)
+{
+  commit_stall = ticks0;
+}
+
+static void
+log_maybe_stall(void)
+{
+  if(commit_stall <= 0)
+    return;
+
+  printf("log commit stalled %d ticks\n", commit_stall);
+  acquire(&tickslock);
+  uint t0 = ticks;
+  while(ticks - t0 < (uint)commit_stall)
+    sleep(&ticks, &tickslock);
+  release(&tickslock);
 }
 
 void

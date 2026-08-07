@@ -181,9 +181,10 @@ class QEMU(object):
 
 def crash_log():
     q = QEMU(True)
-    q.cmd("logstress f0 f1 f2 f3\n")
-    q.monitor("^logstress start", timeout=30)
-    time.sleep(12)
+    q.cmd("logstress stall f0 f1 f2 f3\n")
+    q.monitor("^logstress files ready", timeout=30)
+    q.monitor("^log commit stalled 100 ticks", timeout=30)
+    time.sleep(1)
     q.crash()
     q.stop()
 

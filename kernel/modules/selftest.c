@@ -80,6 +80,9 @@ selftest_handler(int cmd, uint64 arg0, uint64 arg1)
     return kthread_create(kthread_worker, 0);
   case SELFTEST_CMD_KTHREAD_COUNT:
     return kthread_count;
+  case SELFTEST_CMD_LOG_STALL:
+    log_set_commit_stall((int)arg0);
+    return arg0;
   default:
     return -1;
   }
