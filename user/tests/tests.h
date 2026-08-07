@@ -50,5 +50,7 @@ extern struct test k7_quicktests[];
 extern struct test k7_slowtests[];
 extern struct test k8_quicktests[];
 extern struct test k8_slowtests[];
+extern struct test boundary_quicktests[];
+extern struct test boundary_slowtests[];
 
 #endif

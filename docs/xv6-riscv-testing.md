@@ -335,6 +335,15 @@ P3-K8 新增回归用例：
 
 - `clock_device`：`/dev/clock` 单调推进，`/dev/rtc` 返回合法实时时钟。
 
+稳定性边界新增回归用例：
+
+- `clone_badargs`：非法 flags、`CLONE_THREAD` 缺少 `CLONE_VM`、栈未对齐均被拒绝。
+- `fd_badargs`：`dup2`、`pipe2`、`readv/writev`、`poll/select` 非法参数返回 -1。
+- `sem_badargs`：`semget` / `semop` / `semctl` 非法参数与 `IPC_NOWAIT` 冲突被拒绝。
+- `futex_badargs`：空地址、负超时等 futex 非法参数被拒绝。
+- `mprotect_badargs`：未页对齐、零长度、非法 prot 被拒绝。
+- `module_badargs`：非法槽位、零长度、超大模块被拒绝。
+
 P3-K2b 新增自动化用例：
 
 - `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。

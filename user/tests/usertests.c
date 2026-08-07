@@ -25,6 +25,7 @@ static struct testsuite suites[] = {
   { k6_quicktests, k6_slowtests },
   { k7_quicktests, k7_slowtests },
   { k8_quicktests, k8_slowtests },
+  { boundary_quicktests, boundary_slowtests },
 };
 
 // run each test in its own process. run returns 1 if child's exit()

@@ -128,6 +128,10 @@ sys_semop(void)
         x->waiters++;
         sleep(&x->val, &s->lock);
         x->waiters--;
+        if(!s->used){
+          release(&s->lock);
+          return -1;
+        }
         if(killed(myproc())){
           release(&s->lock);
           return -1;
@@ -146,6 +150,10 @@ sys_semop(void)
         x->waiters++;
         sleep(&x->val, &s->lock);
         x->waiters--;
+        if(!s->used){
+          release(&s->lock);
+          return -1;
+        }
       }
     }
   }
@@ -191,6 +199,8 @@ sys_semctl(void)
     release(&s->lock);
     return 0;
   case IPC_RMID:
+    for(int j = 0; j < s->nsems; j++)
+      wakeup(&s->sems[j].val);
     s->used = 0;
     s->key = 0;
     s->nsems = 0;
