@@ -29,6 +29,8 @@ main(void)
   mknod("proc", KMOD_PROC_MAJOR, 0);
   mknod("zero", ZERO_DEV, 0);
   mknod("null", NULL_DEV, 0);
+  mknod("clock", CLOCK_DEV, 0);
+  mknod("rtc", RTC_DEV, 0);
   dup(0);  // stdout
   dup(0);  // stderr
 

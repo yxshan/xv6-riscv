@@ -124,9 +124,12 @@
 
 ### P3-K8：设备与时钟
 
-状态：待开始
+状态：已完成
 
-- `/dev/clock`、RTC、更多 virtio 设备。
+- 新增 `/dev/clock`：读取返回单调时钟 `struct timespec`。
+- 新增 `/dev/rtc`：基于固定启动纪元的合成实时时钟。
+- virtio 块设备已支持 3 个（根盘、第二盘、交换盘），网络等更多 virtio 设备延后。
+- 新增 `clock_device` 回归测试。
 
 ## 4. 完成判定
 

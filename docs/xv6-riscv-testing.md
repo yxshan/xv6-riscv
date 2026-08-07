@@ -331,6 +331,10 @@ P3-K7 新增回归用例：
   再卸载被依赖方；被依赖模块在仍有引用时卸载会失败。
 - `dynmod_lifecycle`：扩展为验证模块参数注册与读写，参数卸载后自动清理。
 
+P3-K8 新增回归用例：
+
+- `clock_device`：`/dev/clock` 单调推进，`/dev/rtc` 返回合法实时时钟。
+
 P3-K2b 新增自动化用例：
 
 - `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。

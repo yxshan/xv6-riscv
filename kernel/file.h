@@ -60,3 +60,5 @@ extern struct devsw devsw[];
 #define CONSOLE 1
 #define ZERO_DEV 5
 #define NULL_DEV 6
+#define CLOCK_DEV 7
+#define RTC_DEV 8
