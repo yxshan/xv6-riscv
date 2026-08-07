@@ -89,6 +89,7 @@ void panic(char*);
 struct cmd *parsecmd(char*);
 void runcmd(struct cmd*) __attribute__((noreturn));
 static void addhistory(char *s);
+static int sh_readline(char *buf, int nbuf);
 
 // 执行命令树。正常情况下不会返回。
 void
@@ -206,7 +207,8 @@ getcmd(char *buf, int nbuf)
 {
   write(2, "$ ", 2);
   memset(buf, 0, nbuf);
-  gets(buf, nbuf);
+  if(sh_readline(buf, nbuf) < 0)
+    return -1;
   if(buf[0] == 0) // 读到 EOF，结束 shell
     return -1;
   return 0;
@@ -364,6 +366,8 @@ expand_history(char *buf, int nbuf)
     return;
   }
   int len = strlen(history[n]);
+  if(len > 0 && history[n][len - 1] == '\n')
+    len--;
   int rest = strlen(buf + (buf[1] == '!' ? 2 : 1 + (buf[1] >= '0' && buf[1] <= '9' ? 1 : 0)));
   if(len + rest + 1 > (int)sizeof(tmp))
     return;
@@ -517,6 +521,101 @@ expand_aliases(char *out, int max, char *in)
     }
   }
   memmove(out, in, strlen(in) + 1);
+}
+
+static int
+hist_copy(int idx, char *dst, int max)
+{
+  int i = 0;
+
+  while(i + 1 < max && history[idx][i] && history[idx][i] != '\n'){
+    dst[i] = history[idx][i];
+    i++;
+  }
+  dst[i] = 0;
+  return i;
+}
+
+static void
+line_redraw(int oldlen, char *line, int newlen)
+{
+  for(int i = 0; i < oldlen; i++)
+    write(2, "\b", 1);
+  if(newlen > 0)
+    write(2, line, newlen);
+  for(int i = newlen; i < oldlen; i++)
+    write(2, " ", 1);
+  for(int i = newlen; i < oldlen; i++)
+    write(2, "\b", 1);
+}
+
+static int
+sh_readline(char *buf, int nbuf)
+{
+  char line[256];
+  int len = 0;
+  int hindex = nhistory;
+  char c;
+
+  line[0] = 0;
+  for(;;){
+    int cc = read(0, &c, 1);
+    if(cc < 1)
+      return -1;
+    if(c == '\n' || c == '\r')
+      break;
+    if(c == 0x08 || c == 0x7f){
+      if(len > 0){
+        write(2, "\b \b", 3);
+        len--;
+        line[len] = 0;
+      }
+      continue;
+    }
+    if(c == 0x15){ // Ctrl-U: 清除当前输入。
+      if(len > 0){
+        line_redraw(len, line, 0);
+        len = 0;
+        line[0] = 0;
+      }
+      continue;
+    }
+    if(c == 0x01){ // Up: 上一条历史。
+      if(hindex > 0){
+        hindex--;
+        int old = len;
+        len = hist_copy(hindex, line, sizeof(line));
+        line_redraw(old, line, len);
+      }
+      continue;
+    }
+    if(c == 0x02){ // Down: 下一条历史。
+      if(hindex < nhistory){
+        hindex++;
+        int old = len;
+        if(hindex == nhistory){
+          line[0] = 0;
+          len = 0;
+        } else {
+          len = hist_copy(hindex, line, sizeof(line));
+        }
+        line_redraw(old, line, len);
+      }
+      continue;
+    }
+    if(c == 0x04)
+      return -1;
+    if(c >= 0x20 && len + 1 < nbuf - 1){
+      line[len++] = c;
+      line[len] = 0;
+    }
+  }
+  if(len + 1 >= nbuf)
+    return -1;
+  memmove(buf, line, len);
+  buf[len] = '\n';
+  buf[len + 1] = 0;
+  return 0;
 }
 
 int

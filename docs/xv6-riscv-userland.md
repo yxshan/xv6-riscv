@@ -8,6 +8,7 @@
 当前 `sh` 已完成：
 
 - 命令历史：`history`、`!!`、`!n`。
+- 上/下方向键：在提示符下切换历史命令，`Down` 回到空行。
 - Shell 变量：`export NAME=value`、`unset NAME`、`vars`、`$NAME` 展开。
 - 别名：`alias name=cmd`、`unalias name`、`aliases`，命令首词展开。
 - 内建命令：`pwd`、`exit`、`history`、`export`、`unset`、`vars`、

@@ -104,6 +104,7 @@ logstress f1 f2 f3
 | `history` | 显示命令历史 | `history` |
 | `!!` | 重放上一条命令 | `!!` |
 | `!n` | 重放第 n 条历史命令 | `!3` |
+| `↑` / `↓` | 在提示符下切换历史命令 | `↑` 选择上一条，`↓` 回到空行 |
 | `export` | 设置或显示 shell 变量 | `export NAME=value` |
 | `unset` | 删除 shell 变量 | `unset NAME` |
 | `vars` | 显示所有 shell 变量 | `vars` |

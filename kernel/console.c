@@ -166,6 +166,16 @@ consoleread(struct file *f, int user_dst, uint64 dst, int n)
 // 处理退格/删行等编辑操作，把字符存入 cons.buf，
 // 并在一整行到达时唤醒 consoleread()。
 //
+static void
+cons_push_char(int c)
+{
+  if(cons.e - cons.r < INPUT_BUF_SIZE){
+    cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
+    cons.w = cons.e;
+    wakeup(&cons.r);
+  }
+}
+
 void
 consoleintr(int c)
 {
@@ -183,8 +193,15 @@ consoleintr(int c)
       release(&cons.lock);
       return;
     }
+    int key = 0;
+    if(c == 'A')
+      key = 1;  // Up
+    else if(c == 'B')
+      key = 2;  // Down
     cons.esc = 0;
     cons.esc_bracket = 0;
+    if(key)
+      cons_push_char(key);
     release(&cons.lock);
     return;
   }
@@ -208,18 +225,11 @@ consoleintr(int c)
     procdump();
     break;
   case C('U'):  // Kill line.
-    while(cons.e != cons.w &&
-          cons.buf[(cons.e-1) % INPUT_BUF_SIZE] != '\n'){
-      cons.e--;
-      consputc(BACKSPACE);
-    }
+    cons_push_char(0x15);
     break;
   case C('H'): // Backspace
   case '\x7f': // Delete key
-    if(cons.e != cons.w){
-      cons.e--;
-      consputc(BACKSPACE);
-    }
+    cons_push_char(0x08);
     break;
   default:
     if(c != 0 && cons.e-cons.r < INPUT_BUF_SIZE){
@@ -228,14 +238,8 @@ consoleintr(int c)
       // 回显字符。
       consputc(c);
 
-      // 存入环形缓冲区供 consoleread() 消费。
-      cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
-
-      if(c == '\n' || c == C('D') || cons.e-cons.r == INPUT_BUF_SIZE){
-        // 一整行（或文件结束、缓冲区满）到达时唤醒读进程。
-        cons.w = cons.e;
-        wakeup(&cons.r);
-      }
+      // 实时交付给用户态，由 shell 完成行编辑与历史切换。
+      cons_push_char(c);
     }
     break;
   }
