@@ -166,6 +166,8 @@ extern uint64 sys_writev(void);
 extern uint64 sys_pipe2(void);
 extern uint64 sys_poll(void);
 extern uint64 sys_select(void);
+extern uint64 sys_mprotect(void);
+extern uint64 sys_flock(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -249,6 +251,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_pipe2] sys_pipe2,
 [SYS_poll] sys_poll,
 [SYS_select] sys_select,
+[SYS_mprotect] sys_mprotect,
+[SYS_flock] sys_flock,
 };
 
 void

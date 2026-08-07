@@ -200,6 +200,85 @@ sys_fsync(void)
 }
 
 uint64
+sys_flock(void)
+{
+  struct file *f;
+  struct inode *ip;
+  int fd, op, type, owner;
+
+  argint(0, &fd);
+  argint(1, &op);
+  if(argfd(0, 0, &f) < 0)
+    return -1;
+  if(f->type != FD_INODE && f->type != FD_FIFO)
+    return -1;
+  type = op & (LOCK_SH | LOCK_EX);
+  if((op & ~(LOCK_SH | LOCK_EX | LOCK_NB | LOCK_UN)) != 0 ||
+     (type != 0 && (type & (type - 1)) != 0) ||
+     ((op & LOCK_UN) && (op & (LOCK_SH | LOCK_EX))) ||
+     ((op & LOCK_UN) == 0 && type == 0))
+    return -1;
+
+  ip = f->ip;
+  owner = myproc()->tgid;
+  acquire(&ip->flock_lock);
+
+  if(op & LOCK_UN){
+    if(ip->flock_type == LOCK_EX && ip->flock_owner == owner){
+      ip->flock_type = 0;
+      ip->flock_ref = 0;
+      ip->flock_owner = 0;
+      wakeup(ip);
+    } else if(ip->flock_type == LOCK_SH && ip->flock_ref > 0){
+      ip->flock_ref--;
+      if(ip->flock_ref == 0){
+        ip->flock_type = 0;
+        ip->flock_owner = 0;
+      }
+      wakeup(ip);
+    }
+    release(&ip->flock_lock);
+    return 0;
+  }
+
+  for(;;){
+    if(killed(myproc()) || myproc()->stop_pending){
+      release(&ip->flock_lock);
+      return -1;
+    }
+    if(ip->flock_type == 0){
+      ip->flock_type = type;
+      ip->flock_ref = 1;
+      ip->flock_owner = owner;
+      break;
+    }
+    if(ip->flock_type == LOCK_SH && type == LOCK_SH){
+      ip->flock_ref++;
+      break;
+    }
+    if(ip->flock_owner == owner){
+      if(type == LOCK_EX){
+        ip->flock_type = LOCK_EX;
+        ip->flock_ref = 1;
+      } else {
+        if(ip->flock_type == LOCK_EX)
+          ip->flock_ref = 0;
+        ip->flock_type = LOCK_SH;
+        ip->flock_ref++;
+      }
+      break;
+    }
+    if(op & LOCK_NB){
+      release(&ip->flock_lock);
+      return -1;
+    }
+    sleep(ip, &ip->flock_lock);
+  }
+  release(&ip->flock_lock);
+  return 0;
+}
+
+uint64
 sys_readv(void)
 {
   struct file *f;
@@ -972,4 +1051,17 @@ sys_munmap(void)
   argaddr(0, &addr);
   argaddr(1, &length);
   return vma_remove(p, addr, length);
+}
+
+uint64
+sys_mprotect(void)
+{
+  uint64 addr, length;
+  int prot;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+  argaddr(1, &length);
+  argint(2, &prot);
+  return vma_mprotect(p, addr, length, prot);
 }

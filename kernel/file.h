@@ -1,6 +1,8 @@
 // 打开的文件抽象。
 // 一个 struct file 可能同时被多个文件描述符引用（fork/dup 共享），
 // 因此用 ref 计数；type 决定读写操作具体分派到管道、inode 还是设备。
+#include "spinlock.h"
+
 struct file {
   enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE, FD_FIFO } type;
   int ref; // 引用计数
@@ -38,6 +40,10 @@ struct inode {
   uint size;
   uint addrs[NDIRECT+2];
   struct pipe *fifo;  // T_FIFO: in-memory named pipe object
+  struct spinlock flock_lock; // 文件锁状态锁
+  int flock_type;             // LOCK_SH / LOCK_EX / 0
+  int flock_ref;              // 共享锁持有者计数
+  int flock_owner;            // 独占锁持有者 tgid
 };
 
 // 设备号到设备读写函数的映射表。
@@ -52,3 +58,5 @@ struct devsw {
 extern struct devsw devsw[];
 
 #define CONSOLE 1
+#define ZERO_DEV 5
+#define NULL_DEV 6

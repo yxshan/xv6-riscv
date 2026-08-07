@@ -34,6 +34,7 @@ main()
     swapinit();      // 初始化交换空间槽位
     futexinit();     // 初始化 futex 等待表锁
     fileinit();      // 初始化打开文件表
+    pseudoinit();    // 注册 /dev/zero 与 /dev/null
     virtio_disk_init(); // 初始化 QEMU 模拟的 virtio 磁盘
     userinit();      // 创建第一个用户进程 init
     __sync_synchronize();

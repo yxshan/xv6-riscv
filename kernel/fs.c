@@ -211,6 +211,7 @@ iinit()
   initlock(&itable.lock, "itable");
   for(i = 0; i < NINODE; i++) {
     initsleeplock(&itable.inode[i].lock, "inode");
+    initlock(&itable.inode[i].flock_lock, "flock");
   }
 }
 
@@ -296,6 +297,9 @@ iget(uint dev, uint inum)
   ip->inum = inum;
   ip->ref = 1;
   ip->valid = 0;
+  ip->flock_type = 0;
+  ip->flock_ref = 0;
+  ip->flock_owner = 0;
   release(&itable.lock);
 
   return ip;

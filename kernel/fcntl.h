@@ -6,6 +6,11 @@
 #define O_NONBLOCK 0x800
 #define O_CLOEXEC  0x1000
 
+#define LOCK_SH 1
+#define LOCK_EX 2
+#define LOCK_NB 4
+#define LOCK_UN 8
+
 #define PROT_NONE  0
 #define PROT_READ  1
 #define PROT_WRITE 2

@@ -96,9 +96,14 @@
 
 ### P3-K6：内存与文件系统补强
 
-状态：待开始
+状态：部分完成
 
-- `mprotect`、基础伪设备、文件锁、`chroot`、OOM/换页策略完善。
+- 新增 `mprotect`，支持修改 VMA 权限并同步线程组页表，`PROT_NONE` 真正阻止用户访问。
+- 新增 `/dev/zero`、`/dev/null` 基础伪设备，由 `init` 启动时创建节点。
+- 新增 `flock`，支持 `LOCK_SH` / `LOCK_EX` / `LOCK_NB` / `LOCK_UN` 和跨进程互斥。
+- `chroot` 已支持进程根目录、绝对路径与绝对符号链接解析。
+- 换页路径保留 `vmfault` 自动换入与 `swap_evict` 手动换出；OOM 自动调度策略待后续补充。
+- 新增 `mprotect_basic`、`mprotect_none`、`pseudo_devices`、`flock_basic` 回归测试。
 
 ### P3-K7：IPC 与模块基础设施
 

@@ -314,6 +314,13 @@ P3-K5 新增回归用例：
 - `readv_writev_basic`：多个 iovec 连续写入和读回。
 - `pipe2_poll_select`：`pipe2` 创建管道，`poll` / `select` 能检测可读与无效 fd。
 
+P3-K6 新增回归用例：
+
+- `mprotect_basic`：`mprotect` 修改 mmap 权限后原数据仍可读，非法参数被拒绝。
+- `mprotect_none`：`PROT_NONE` 后访问页面会触发缺页并终止进程。
+- `pseudo_devices`：`/dev/zero` 返回零字节，`/dev/null` 丢弃写入并返回 EOF。
+- `flock_basic`：共享锁可同时持有，独占锁跨进程互斥，`LOCK_NB` 冲突时立即失败。
+
 P3-K2b 新增自动化用例：
 
 - `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。

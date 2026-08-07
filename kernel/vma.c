@@ -364,6 +364,51 @@ vma_remove(struct proc *p, uint64 addr, uint64 length)
   return 0;
 }
 
+// 修改一段 VMA 的访问权限，并同步所有共享该 VMA 表的线程页表。
+// 目前要求 addr/end 覆盖整个 VMA，避免引入 VMA 拆分复杂度。
+int
+vma_mprotect(struct proc *p, uint64 addr, uint64 length, int prot)
+{
+  struct proc_vmas *pv = p->vmas;
+  struct vma *v;
+  uint64 end;
+  int perm = (prot == 0) ? PTE_R : (PTE_U | PTE_R);
+
+  if(pv == 0 || addr % PGSIZE != 0 || length == 0 || addr >= MAXVA ||
+     length > MAXVA - addr || (prot & ~(PROT_READ|PROT_WRITE|PROT_EXEC)))
+    return -1;
+  end = PGROUNDUP(addr + length);
+
+  acquiresleep(&pv->lock);
+  v = vma_find_locked(pv, addr);
+  if(v == 0 || addr < v->start || end > v->end){
+    releasesleep(&pv->lock);
+    return -1;
+  }
+
+  if(prot & PROT_WRITE)
+    perm |= PTE_W;
+  if(prot & PROT_EXEC)
+    perm |= PTE_X;
+
+  for(struct proc *q = proc; q < &proc[NPROC]; q++){
+    if(q->vmas != pv || q->pagetable == 0)
+      continue;
+    for(uint64 va = addr; va < end; va += PGSIZE){
+      pte_t *pte = walk(q->pagetable, va, 0);
+
+      if(pte == 0 || (*pte & PTE_V) == 0 || IS_SWAP(*pte))
+        continue;
+      *pte = (*pte & ~(PTE_R|PTE_W|PTE_X|PTE_U)) | perm;
+    }
+    sfence_vma();
+  }
+
+  v->prot = prot;
+  releasesleep(&pv->lock);
+  return 0;
+}
+
 // exec 前清除旧进程的所有 VMA：
 // 先写回共享页，再解除所有线程页表中的映射，最后释放 inode 引用。
 // 表本身仍由 proc_vmas_release() 在进程回收时释放。
@@ -496,6 +541,10 @@ vma_fault(struct proc *p, uint64 va)
   acquiresleep(&pv->lock);
   v = vma_find_locked(pv, va);
   if(v == 0 || ismapped(p->pagetable, va)){
+    releasesleep(&pv->lock);
+    return 0;
+  }
+  if(v->prot == 0){
     releasesleep(&pv->lock);
     return 0;
   }

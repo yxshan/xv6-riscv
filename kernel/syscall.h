@@ -80,3 +80,5 @@
 #define SYS_pipe2 77
 #define SYS_poll 78
 #define SYS_select 79
+#define SYS_mprotect 80
+#define SYS_flock 81

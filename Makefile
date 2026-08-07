@@ -31,6 +31,7 @@ OBJS = \
   $K/log.o \
   $K/sleeplock.o \
   $K/file.o \
+  $K/pseudo.o \
   $K/pipe.o \
   $K/poll.o \
   $K/exec.o \

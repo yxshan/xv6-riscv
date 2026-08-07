@@ -84,6 +84,8 @@
   X(SYS_writev, writev) \
   X(SYS_pipe2, pipe2) \
   X(SYS_poll, poll) \
-  X(SYS_select, select)
+  X(SYS_select, select) \
+  X(SYS_mprotect, mprotect) \
+  X(SYS_flock, flock)
 
 #endif

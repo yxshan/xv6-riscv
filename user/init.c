@@ -27,6 +27,8 @@ main(void)
   mknod("sysinfo", KMOD_SYSINFO_MAJOR, 0);
   mknod("stats", KMOD_TRACE_MAJOR, 0);
   mknod("proc", KMOD_PROC_MAJOR, 0);
+  mknod("zero", ZERO_DEV, 0);
+  mknod("null", NULL_DEV, 0);
   dup(0);  // stdout
   dup(0);  // stderr
 
