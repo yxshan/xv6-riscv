@@ -125,3 +125,123 @@ echo $GREETING
 alias hi=echo hi
 hi
 ```
+
+## 6. 完整指令流程体验
+
+以下流程覆盖文件、目录、管道、重定向、逻辑运算、后台作业、历史、
+变量、别名、模块与观测命令。建议从 xv6 的 `$` 提示符开始逐条执行。
+
+### 6.1 系统信息
+
+```sh
+id
+ps
+procinfo
+swapinfo
+```
+
+预期能看到 uid/gid、进程列表、内存/进程统计和交换空间状态。
+
+### 6.2 文件与目录
+
+```sh
+pwd
+mkdir /demo
+cd /demo
+echo hello > file.txt
+cat file.txt
+ls
+wc file.txt
+grep hello file.txt
+ln file.txt hard.txt
+ln -s file.txt soft.txt
+cat hard.txt
+cat soft.txt
+chmod 600 file.txt
+chown 1 1 file.txt
+```
+
+### 6.3 管道、重定向与逻辑运算
+
+```sh
+echo one && echo two
+cat missing || echo fallback
+ls / | wc
+echo data > pipefile
+cat < pipefile
+cat pipefile >> append.txt
+cat append.txt
+```
+
+预期 `one`、`two`、`fallback` 和文件内容都会按顺序出现。
+
+### 6.4 后台作业与作业控制
+
+```sh
+sleep 20 &
+jobs
+stop %1
+jobs
+bg %1
+fg %1
+```
+
+`jobs` 会显示作业编号、pid 和运行/停止状态；`fg %1` 会等待 `sleep` 结束。
+
+### 6.5 历史、变量与别名
+
+```sh
+export GREETING=hello
+echo $GREETING
+vars
+alias hi=echo hi
+hi
+history
+!!
+!1
+unalias hi
+```
+
+`!!` 重放上一条命令，`!1` 重放第一条历史命令；按 `↑` / `↓` 可以在提示符下切换历史。
+
+### 6.6 模块与观测
+
+```sh
+modload dynmod
+modcli 3 1
+modcli 3 4 42
+modcli 3 3
+strace echo hi
+perf echo hi
+modunload 0
+crashdump
+```
+
+预期能看到动态模块加载、`module_call` 返回值、strace/perf 统计和崩溃转储输出。
+
+### 6.7 回归测试
+
+```sh
+cowtest
+shmtest
+signaltest
+usertests -q
+```
+
+`usertests -q` 会运行完整 quick 回归套件，适合作为最终稳定性验证。
+
+### 6.8 清理
+
+```sh
+cd /
+rm /demo/append.txt
+rm /demo/pipefile
+rm /demo/soft.txt
+rm /demo/hard.txt
+rm /demo/file.txt
+rm /demo
+exit
+```
+
+以上流程基本覆盖了当前 shell 与用户程序的常用能力；`mount/umount`、
+`mkfifo` 和多磁盘操作可结合 `test-xv6.py tools` 单独体验。
