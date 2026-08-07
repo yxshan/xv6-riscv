@@ -305,6 +305,15 @@ P3-K4 新增回归用例：
 - `kill_negative_pgid`：`sigkill(-pgid, sig)` 只向目标进程组投递信号，
   调用者所在进程组不受影响。
 
+P3-K5 新增回归用例：
+
+- `dup2_basic`：`dup2` 复制 fd、保持同 fd 幂等，写入内容可读回。
+- `getcwd_basic`：根目录返回 `/`，`chdir` 后返回对应绝对路径。
+- `chroot_basic`：`chroot` 后 `/` 指向新根，进程只能看到 jail 内文件。
+- `time_basic`：`clock_gettime` 单调推进，`nanosleep` 至少等待请求时长。
+- `readv_writev_basic`：多个 iovec 连续写入和读回。
+- `pipe2_poll_select`：`pipe2` 创建管道，`poll` / `select` 能检测可读与无效 fd。
+
 P3-K2b 新增自动化用例：
 
 - `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。

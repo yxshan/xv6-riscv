@@ -43,6 +43,7 @@ struct proc_files* proc_files_alloc(void);
 void            proc_files_share(struct proc_files*);
 void            proc_files_copy(struct proc_files*, struct proc_files*);
 void            proc_files_release(struct proc_files*);
+void            proc_files_close_cloexec(struct proc_files*);
 struct proc_fs* proc_fs_alloc(void);
 void            proc_fs_share(struct proc_fs*);
 void            proc_fs_copy(struct proc_fs*, struct proc_fs*);
@@ -57,6 +58,7 @@ void            proc_sig_release(struct proc_sig*);
 int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
 int             filewrite(struct file*, uint64, int n);
+int             filefsync(struct file*);
 
 // fs.c
 void            fsinit(int);
@@ -81,6 +83,7 @@ void            itrunc(struct inode*);
 void            ireclaim(int);
 int             iaccess(struct inode*, int);
 int             fsvalid(int);
+int             kgetcwd(char*, int);
 
 // mount.c
 void            mountinit(void);
@@ -114,6 +117,8 @@ void            fifo_close(struct pipe*, int);
 void            pipeclose(struct pipe*, int);
 int             piperead(struct pipe*, uint64, int);
 int             pipewrite(struct pipe*, uint64, int);
+int             pipe_ready_read(struct pipe*);
+int             pipe_ready_write(struct pipe*);
 
 // printf.c
 int             printf(char*, ...) __attribute__ ((format (printf, 1, 2)));

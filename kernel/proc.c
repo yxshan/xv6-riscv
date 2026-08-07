@@ -345,7 +345,10 @@ userinit(void)
   p->fs = proc_fs_alloc();
   if(p->fs == 0)
     panic("proc_fs_alloc");
-  p->fs->cwd = namei("/");
+  p->fs->root = namei("/");
+  if(p->fs->root == 0)
+    panic("root namei");
+  p->fs->cwd = idup(p->fs->root);
   p->vmas = proc_vmas_alloc();
   if(p->vmas == 0)
     panic("proc_vmas_alloc");

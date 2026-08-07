@@ -69,3 +69,14 @@
 #define SYS_exit_group 66
 #define SYS_sigaction 67
 #define SYS_sigpending 68
+#define SYS_dup2 69
+#define SYS_getcwd 70
+#define SYS_chroot 71
+#define SYS_fsync 72
+#define SYS_nanosleep 73
+#define SYS_clock_gettime 74
+#define SYS_readv 75
+#define SYS_writev 76
+#define SYS_pipe2 77
+#define SYS_poll 78
+#define SYS_select 79

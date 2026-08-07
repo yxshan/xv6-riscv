@@ -42,5 +42,7 @@ extern struct test thread_quicktests[];
 extern struct test thread_slowtests[];
 extern struct test signal_quicktests[];
 extern struct test signal_slowtests[];
+extern struct test k5_quicktests[];
+extern struct test k5_slowtests[];
 
 #endif

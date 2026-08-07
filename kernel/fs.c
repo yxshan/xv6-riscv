@@ -768,6 +768,83 @@ skipelem(char *path, char *name)
   return path;
 }
 
+static int
+same_inode(struct inode *a, struct inode *b)
+{
+  return a != 0 && b != 0 && a->dev == b->dev && a->inum == b->inum;
+}
+
+// 从 dir 递归查找 target，成功后把相对 dir 的路径写入 buf。
+static int
+find_path_rec(struct inode *dir, struct inode *target, char *buf, int max,
+              int depth)
+{
+  struct dirent de;
+  char tmp[MAXPATH], name[DIRSIZ + 1];
+  uint off;
+
+  if(same_inode(dir, target)){
+    buf[0] = 0;
+    return 0;
+  }
+  if(depth > 32)
+    return -1;
+
+  ilock(dir);
+  if(dir->type != T_DIR){
+    iunlock(dir);
+    return -1;
+  }
+  for(off = 0; off < dir->size; off += sizeof(de)){
+    if(readi(dir, 0, (uint64)&de, off, sizeof(de)) != sizeof(de)){
+      iunlock(dir);
+      return -1;
+    }
+    if(de.inum == 0)
+      continue;
+    memmove(name, de.name, DIRSIZ);
+    name[DIRSIZ] = 0;
+    if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0)
+      continue;
+
+    struct inode *child = iget(dir->dev, de.inum);
+    iunlock(dir);
+    int r = find_path_rec(child, target, tmp, MAXPATH, depth + 1);
+    iput(child);
+    if(r == 0){
+      int nlen = strlen(name);
+      int plen = strlen(tmp);
+      if(nlen + plen + 2 > max)
+        return -1;
+      memmove(buf, "/", 1);
+      memmove(buf + 1, name, nlen);
+      memmove(buf + 1 + nlen, tmp, plen + 1);
+      return 0;
+    }
+    ilock(dir);
+  }
+  iunlock(dir);
+  return -1;
+}
+
+// 获取当前工作目录相对进程根目录的路径。
+int
+kgetcwd(char *buf, int max)
+{
+  struct proc *p = myproc();
+
+  if(p->fs == 0 || p->fs->root == 0 || p->fs->cwd == 0)
+    return -1;
+  if(find_path_rec(p->fs->root, p->fs->cwd, buf, max, 0) < 0)
+    return -1;
+  if(buf[0] == 0){
+    if(max < 2)
+      return -1;
+    memmove(buf, "/", 2);
+  }
+  return 0;
+}
+
 // 解析路径并返回对应 inode。
 // nameiparent 非 0 时返回父目录 inode，并把最后一段路径元素
 // 复制到 name（至少 DIRSIZ 字节）。
@@ -781,10 +858,13 @@ namex(char *path, int nameiparent, char *name)
   // 挂载锁在整个路径解析期间持有，保证 mount/umount 不会与路径穿越竞争。
   mount_acquire();
 
-  // 绝对路径从根 inode 开始，相对路径从当前目录开始。
-  if(*path == '/')
-    ip = iget(ROOTDEV, ROOTINO);
-  else
+  // 绝对路径从进程根目录开始，相对路径从当前目录开始。
+  if(*path == '/'){
+    if(myproc() && myproc()->fs && myproc()->fs->root)
+      ip = idup(myproc()->fs->root);
+    else
+      ip = iget(ROOTDEV, ROOTINO);
+  } else
     ip = idup(myproc()->fs->cwd);
 
   while((path = skipelem(path, name)) != 0){
@@ -851,9 +931,12 @@ namex(char *path, int nameiparent, char *name)
       }
 
       if(target[0] == '/'){
-        // 绝对符号链接：从全局根目录重新解析，挂载点由 mount_enter 处理。
+        // 绝对符号链接：从进程根目录重新解析，挂载点由 mount_enter 处理。
         iput(ip);
-        ip = iget(ROOTDEV, ROOTINO);
+        if(myproc() && myproc()->fs && myproc()->fs->root)
+          ip = idup(myproc()->fs->root);
+        else
+          ip = iget(ROOTDEV, ROOTINO);
         path = target;
       } else {
         // 相对符号链接：继续从当前目录解析，ip 已解锁。

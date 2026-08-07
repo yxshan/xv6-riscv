@@ -90,6 +90,7 @@ struct proc_files {
   struct spinlock lock;
   int ref;
   struct file *ofile[NOFILE];
+  uint cloexec[NOFILE];
 };
 
 // 共享的文件系统上下文：当前工作目录。
@@ -97,6 +98,7 @@ struct proc_files {
 struct proc_fs {
   struct spinlock lock;
   int ref;
+  struct inode *root;
   struct inode *cwd;
 };
 

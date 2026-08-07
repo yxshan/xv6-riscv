@@ -16,6 +16,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "uio.h"
 
 static struct inode* create(char *path, short type, short major, short minor, ushort mode);
 
@@ -66,7 +67,35 @@ sys_dup(void)
     return -1;
   // dup 让两个描述符共享同一个文件对象，因此增加引用计数。
   filedup(f);
+  myproc()->files->cloexec[fd] = 0;
   return fd;
+}
+
+uint64
+sys_dup2(void)
+{
+  struct proc *p = myproc();
+  struct file *f, *old;
+  int oldfd, newfd;
+
+  argint(0, &oldfd);
+  argint(1, &newfd);
+  if(oldfd < 0 || oldfd >= NOFILE || newfd < 0 || newfd >= NOFILE)
+    return -1;
+  f = p->files->ofile[oldfd];
+  if(f == 0)
+    return -1;
+  if(oldfd == newfd)
+    return newfd;
+  old = p->files->ofile[newfd];
+  if(old){
+    p->files->ofile[newfd] = 0;
+    fileclose(old);
+  }
+  p->files->ofile[newfd] = f;
+  p->files->cloexec[newfd] = 0;
+  filedup(f);
+  return newfd;
 }
 
 uint64
@@ -108,8 +137,139 @@ sys_close(void)
   if(argfd(0, &fd, &f) < 0)
     return -1;
   myproc()->files->ofile[fd] = 0;
+  myproc()->files->cloexec[fd] = 0;
   fileclose(f);
   return 0;
+}
+
+uint64
+sys_getcwd(void)
+{
+  uint64 addr;
+  int size;
+  char buf[MAXPATH];
+
+  argaddr(0, &addr);
+  argint(1, &size);
+  if(size <= 0 || size > MAXPATH)
+    return -1;
+  if(kgetcwd(buf, size) < 0)
+    return -1;
+  if(copyout(myproc()->pagetable, addr, buf, strlen(buf) + 1) < 0)
+    return -1;
+  return 0;
+}
+
+uint64
+sys_chroot(void)
+{
+  char path[MAXPATH];
+  struct inode *ip, *old;
+  struct proc *p = myproc();
+
+  if(p->fs == 0 || argstr(0, path, MAXPATH) < 0)
+    return -1;
+  begin_op();
+  if((ip = namei(path)) == 0){
+    end_op();
+    return -1;
+  }
+  ilock(ip);
+  if(ip->type != T_DIR || iaccess(ip, 1) < 0){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  iunlock(ip);
+  old = p->fs->root;
+  p->fs->root = ip;
+  if(old)
+    iput(old);
+  end_op();
+  return 0;
+}
+
+uint64
+sys_fsync(void)
+{
+  struct file *f;
+
+  if(argfd(0, 0, &f) < 0)
+    return -1;
+  return filefsync(f);
+}
+
+uint64
+sys_readv(void)
+{
+  struct file *f;
+  struct iovec uv;
+  uint64 iovaddr;
+  int fd, iovcnt, total = 0;
+
+  argint(0, &fd);
+  argaddr(1, &iovaddr);
+  argint(2, &iovcnt);
+  if(iovcnt <= 0 || iovcnt > 16 || argfd(0, 0, &f) < 0)
+    return -1;
+
+  for(int i = 0; i < iovcnt; i++){
+    if(copyin(myproc()->pagetable, (char*)&uv, iovaddr + i * sizeof(uv),
+              sizeof(uv)) < 0)
+      return -1;
+    if(uv.iov_len == 0)
+      continue;
+    if(uv.iov_len > 0x7fffffff)
+      return -1;
+    int n = fileread(f, (uint64)uv.iov_base, (int)uv.iov_len);
+    if(n < 0){
+      if(total == 0)
+        return -1;
+      break;
+    }
+    total += n;
+    if(n < (int)uv.iov_len)
+      break;
+  }
+  return total;
+}
+
+uint64
+sys_writev(void)
+{
+  struct file *f;
+  struct iovec uv;
+  uint64 iovaddr;
+  int fd, iovcnt, total = 0;
+
+  argint(0, &fd);
+  argaddr(1, &iovaddr);
+  argint(2, &iovcnt);
+  if(iovcnt <= 0 || iovcnt > 16 || argfd(0, 0, &f) < 0)
+    return -1;
+
+  for(int i = 0; i < iovcnt; i++){
+    if(copyin(myproc()->pagetable, (char*)&uv, iovaddr + i * sizeof(uv),
+              sizeof(uv)) < 0)
+      return -1;
+    if(uv.iov_len == 0)
+      continue;
+    if(uv.iov_len > 0x7fffffff)
+      return -1;
+    int n = filewrite(f, (uint64)uv.iov_base, (int)uv.iov_len);
+    if(n < 0){
+      if(total == 0)
+        return -1;
+      break;
+    }
+    total += n;
+    if(n < (int)uv.iov_len){
+      if(total == 0)
+        return -1;
+      break;
+    }
+  }
+  return total;
 }
 
 uint64
@@ -550,9 +710,12 @@ sys_open(void)
   f->ip = ip;
   f->readable = !(omode & O_WRONLY);
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+  f->nonblock = (omode & O_NONBLOCK) != 0;
+  myproc()->files->cloexec[fd] = (omode & O_CLOEXEC) != 0;
 
   if(ip->type == T_DEVICE && devsw[f->major].open && devsw[f->major].open(f) < 0){
     myproc()->files->ofile[fd] = 0;
+    myproc()->files->cloexec[fd] = 0;
     iunlock(ip);
     fileclose(f);
     end_op();
@@ -680,18 +843,20 @@ sys_exec(void)
   return -1;
 }
 
-uint64
-sys_pipe(void)
+static int
+pipe_common(uint64 fdarray, int flags)
 {
-  uint64 fdarray; // user pointer to array of two integers
   struct file *rf, *wf;
   int fd0, fd1;
   struct proc *p = myproc();
 
-  argaddr(0, &fdarray);
+  if((flags & ~(O_CLOEXEC | O_NONBLOCK)) != 0)
+    return -1;
   // 创建一对文件对象：rf 负责读，wf 负责写。
   if(pipealloc(&rf, &wf) < 0)
     return -1;
+  rf->nonblock = (flags & O_NONBLOCK) != 0;
+  wf->nonblock = (flags & O_NONBLOCK) != 0;
   fd0 = -1;
   if((fd0 = fdalloc(rf)) < 0 || (fd1 = fdalloc(wf)) < 0){
     if(fd0 >= 0)
@@ -700,16 +865,42 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  if(flags & O_CLOEXEC){
+    p->files->cloexec[fd0] = 1;
+    p->files->cloexec[fd1] = 1;
+  }
   // 把两个描述符写回用户提供的 int[2] 数组。
   if(copyout(p->pagetable, fdarray, (char*)&fd0, sizeof(fd0)) < 0 ||
      copyout(p->pagetable, fdarray+sizeof(fd0), (char *)&fd1, sizeof(fd1)) < 0){
     p->files->ofile[fd0] = 0;
     p->files->ofile[fd1] = 0;
+    p->files->cloexec[fd0] = 0;
+    p->files->cloexec[fd1] = 0;
     fileclose(rf);
     fileclose(wf);
     return -1;
   }
   return 0;
+}
+
+uint64
+sys_pipe(void)
+{
+  uint64 fdarray;
+
+  argaddr(0, &fdarray);
+  return pipe_common(fdarray, 0);
+}
+
+uint64
+sys_pipe2(void)
+{
+  uint64 fdarray;
+  int flags;
+
+  argaddr(0, &fdarray);
+  argint(1, &flags);
+  return pipe_common(fdarray, flags);
 }
 
 // mmap：创建文件或匿名映射，地址由内核在 mmap 区域分配。

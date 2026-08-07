@@ -49,10 +49,12 @@ pipealloc(struct file **f0, struct file **f1)
   (*f0)->type = FD_PIPE;
   (*f0)->readable = 1;
   (*f0)->writable = 0;
+  (*f0)->nonblock = 0;
   (*f0)->pipe = pi;
   (*f1)->type = FD_PIPE;
   (*f1)->readable = 0;
   (*f1)->writable = 1;
+  (*f1)->nonblock = 0;
   (*f1)->pipe = pi;
   return 0;
 
@@ -64,6 +66,29 @@ pipealloc(struct file **f0, struct file **f1)
   if(*f1)
     fileclose(*f1);
   return -1;
+}
+
+// poll/select 使用的管道就绪查询。
+int
+pipe_ready_read(struct pipe *pi)
+{
+  int ready;
+
+  acquire(&pi->lock);
+  ready = (pi->nread != pi->nwrite) || pi->writeopen == 0;
+  release(&pi->lock);
+  return ready;
+}
+
+int
+pipe_ready_write(struct pipe *pi)
+{
+  int ready;
+
+  acquire(&pi->lock);
+  ready = (pi->nwrite < pi->nread + PIPESIZE) || pi->readopen == 0;
+  release(&pi->lock);
+  return ready;
 }
 
 // 为命名管道分配一个独立的 pipe 对象。

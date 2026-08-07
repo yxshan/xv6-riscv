@@ -6,6 +6,7 @@ struct file {
   int ref; // 引用计数
   char readable;
   char writable;
+  int nonblock;
   struct pipe *pipe; // FD_PIPE
   struct inode *ip;  // FD_INODE and FD_DEVICE
   uint off;          // FD_INODE

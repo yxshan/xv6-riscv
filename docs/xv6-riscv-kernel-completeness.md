@@ -84,10 +84,15 @@
 
 ### P3-K5：系统调用面补齐
 
-状态：待开始
+状态：已完成
 
-- `dup2`、`getcwd`、`chroot`、`fsync`、`nanosleep`、
-  `clock_gettime`、`select/poll`、`readv/writev`、`pipe2`。
+- 新增 `dup2`、`getcwd`、`chroot`、`fsync`。
+- 新增 `nanosleep`、`clock_gettime`，基于 10Hz 内核时钟节拍提供单调时间。
+- 新增 `readv` / `writev`，支持最多 16 个 iovec。
+- 新增 `pipe2`，支持 `O_CLOEXEC` / `O_NONBLOCK`，exec 成功提交前关闭 CLOEXEC fd。
+- 新增 `poll` / `select`，支持普通文件、设备、管道/FIFO 的就绪查询和超时轮询。
+- 新增 `dup2_basic`、`getcwd_basic`、`chroot_basic`、`time_basic`、
+  `readv_writev_basic`、`pipe2_poll_select` 回归测试。
 
 ### P3-K6：内存与文件系统补强
 

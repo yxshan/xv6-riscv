@@ -1,5 +1,8 @@
 #include "kernel/param.h"
 #include "kernel/signal.h"
+#include "kernel/time.h"
+#include "kernel/uio.h"
+#include "kernel/poll.h"
 
 #define SBRK_ERROR ((char *)-1)
 
@@ -26,6 +29,17 @@ int mkdir(const char*);
 int chdir(const char*);
 int dup(int);
 int getpid(void);
+int dup2(int, int);
+int getcwd(char*, int);
+int chroot(const char*);
+int fsync(int);
+int nanosleep(const struct timespec*, struct timespec*);
+int clock_gettime(int, struct timespec*);
+int readv(int, const struct iovec*, int);
+int writev(int, const struct iovec*, int);
+int pipe2(int*, int);
+int poll(struct pollfd*, int, int);
+int select(int, fd_set*, fd_set*, fd_set*, const struct timespec*);
 char* sys_sbrk(int,int);
 int pause(int);
 int uptime(void);

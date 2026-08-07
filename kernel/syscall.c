@@ -155,6 +155,17 @@ extern uint64 sys_tcgetpgrp(void);
 extern uint64 sys_exit_group(void);
 extern uint64 sys_sigaction(void);
 extern uint64 sys_sigpending(void);
+extern uint64 sys_dup2(void);
+extern uint64 sys_getcwd(void);
+extern uint64 sys_chroot(void);
+extern uint64 sys_fsync(void);
+extern uint64 sys_nanosleep(void);
+extern uint64 sys_clock_gettime(void);
+extern uint64 sys_readv(void);
+extern uint64 sys_writev(void);
+extern uint64 sys_pipe2(void);
+extern uint64 sys_poll(void);
+extern uint64 sys_select(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -227,6 +238,17 @@ static uint64 (*syscalls[])(void) = {
 [SYS_exit_group] sys_exit_group,
 [SYS_sigaction] sys_sigaction,
 [SYS_sigpending] sys_sigpending,
+[SYS_dup2] sys_dup2,
+[SYS_getcwd] sys_getcwd,
+[SYS_chroot] sys_chroot,
+[SYS_fsync] sys_fsync,
+[SYS_nanosleep] sys_nanosleep,
+[SYS_clock_gettime] sys_clock_gettime,
+[SYS_readv] sys_readv,
+[SYS_writev] sys_writev,
+[SYS_pipe2] sys_pipe2,
+[SYS_poll] sys_poll,
+[SYS_select] sys_select,
 };
 
 void

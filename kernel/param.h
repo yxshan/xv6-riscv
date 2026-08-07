@@ -15,6 +15,7 @@
 #define FSSIZE       4096  // size of file system in blocks
 #define MAXPATH      128   // maximum file path name
 #define USERSTACK    1     // user stack pages
+#define TICKS_PER_SEC 10   // QEMU 时钟中断频率
 
 // clone 系统调用 flags，取值与 Linux 常用位保持一致。
 #define CLONE_VM       0x00000100  // 共享地址空间

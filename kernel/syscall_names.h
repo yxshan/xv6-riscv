@@ -73,6 +73,17 @@
   X(SYS_tcgetpgrp, tcgetpgrp) \
   X(SYS_exit_group, exit_group) \
   X(SYS_sigaction, sigaction) \
-  X(SYS_sigpending, sigpending)
+  X(SYS_sigpending, sigpending) \
+  X(SYS_dup2, dup2) \
+  X(SYS_getcwd, getcwd) \
+  X(SYS_chroot, chroot) \
+  X(SYS_fsync, fsync) \
+  X(SYS_nanosleep, nanosleep) \
+  X(SYS_clock_gettime, clock_gettime) \
+  X(SYS_readv, readv) \
+  X(SYS_writev, writev) \
+  X(SYS_pipe2, pipe2) \
+  X(SYS_poll, poll) \
+  X(SYS_select, select)
 
 #endif

@@ -158,6 +158,7 @@ kexec(char *path, char **argv)
 
   // 新镜像已完整构建：终止同组其他线程，并释放旧进程的 mmap 区域。
   kexec_thread_cleanup();
+  proc_files_close_cloexec(p->files);
   vma_clear(p);
 
   // 原子提交：换上新的用户页表、大小、入口 PC 和栈指针，

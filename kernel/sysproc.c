@@ -10,6 +10,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "time.h"
 
 uint64
 sys_exit(void)
@@ -241,6 +242,69 @@ sys_pause(void)
     }
   }
   release(&tickslock);
+  return 0;
+}
+
+uint64
+sys_nanosleep(void)
+{
+  struct proc *p = myproc();
+  struct timespec req;
+  uint64 reqaddr, remaddr;
+  uint64 tick_ns = 1000000000UL / TICKS_PER_SEC;
+  uint64 ns, need, ticks0;
+
+  argaddr(0, &reqaddr);
+  argaddr(1, &remaddr);
+  if(reqaddr == 0 ||
+     copyin(p->pagetable, (char*)&req, reqaddr, sizeof(req)) < 0)
+    return -1;
+  if(req.tv_sec < 0 || req.tv_nsec < 0 || req.tv_nsec >= 1000000000L)
+    return -1;
+
+  ns = (uint64)req.tv_sec * 1000000000UL + (uint64)req.tv_nsec;
+  need = (ns + tick_ns - 1) / tick_ns;
+  if(need == 0)
+    need = 1;
+
+  acquire(&tickslock);
+  ticks0 = ticks;
+  while(ticks - ticks0 < need){
+    if(killed(p)){
+      release(&tickslock);
+      return -1;
+    }
+    if(p->stop_pending){
+      release(&tickslock);
+      return -1;
+    }
+    sleep(&ticks, &tickslock);
+  }
+  release(&tickslock);
+  return 0;
+}
+
+uint64
+sys_clock_gettime(void)
+{
+  struct proc *p = myproc();
+  struct timespec ts;
+  uint64 tp;
+  int clockid;
+  uint t;
+
+  argint(0, &clockid);
+  argaddr(1, &tp);
+  if(clockid != CLOCK_REALTIME && clockid != CLOCK_MONOTONIC)
+    return -1;
+
+  acquire(&tickslock);
+  t = ticks;
+  release(&tickslock);
+  ts.tv_sec = t / TICKS_PER_SEC;
+  ts.tv_nsec = (t % TICKS_PER_SEC) * (1000000000L / TICKS_PER_SEC);
+  if(copyout(p->pagetable, tp, (char*)&ts, sizeof(ts)) < 0)
+    return -1;
   return 0;
 }
 
