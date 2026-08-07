@@ -792,6 +792,9 @@ kexit(int status)
   if(p->tgid == p->pid && p->sig != 0)
     thread_group_exit(p);
 
+  // 若本线程登记为 futex 持有者，退出时标记 owner-died 并唤醒等待者。
+  futex_owner_exited(p->pid);
+
   // 最后一个线程/进程退出时关闭共享文件表、cwd 与地址空间资源。
   proc_files_release(p->files);
   p->files = 0;

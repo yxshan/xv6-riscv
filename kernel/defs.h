@@ -248,6 +248,9 @@ void            futexinit(void);
 uint64          sys_futex_wait(void);
 uint64          sys_futex_wake(void);
 uint64          sys_futex_wait_timeout(void);
+uint64          sys_futex_set_owner(void);
+uint64          sys_futex_clear_owner(void);
+void            futex_owner_exited(int);
 
 // sem.c
 void            seminit(void);

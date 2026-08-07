@@ -108,17 +108,19 @@
 
 ### P3-K7：IPC 与模块基础设施
 
-状态：部分完成
+状态：已完成
 
 - 新增 System V 风格信号量：`semget` / `semop` / `semctl`，支持
   `IPC_CREAT`、`IPC_NOWAIT`、`GETVAL`、`SETVAL`、`IPC_RMID`。
 - 新增 `futex_wait_timeout`，超时后返回失败，值不匹配时立即返回。
+- 新增 futex robust 语义：`futex_set_owner` / `futex_clear_owner`，
+  持有者线程退出时自动标记 `FUTEX_OWNER_DIED` 并唤醒等待者。
 - 新增内核符号导出表 `.ksyms`，动态模块可通过 `lookup_symbol` 解析内核函数。
 - 新增动态模块依赖引用计数：被依赖模块不可先卸载，模块卸载前校验引用。
 - 新增动态模块参数注册：模块通过 `param_register` 暴露可配置参数，
   `dynmod` 使用命令 3/4 读写 `sample_value`。
 - 新增 `sem_basic`、`futex_timeout` 回归测试。
-- futex robust 语义待下一批补充。
+- 新增 `futex_robust` 回归测试。
 
 ### P3-K8：设备与时钟
 

@@ -86,3 +86,5 @@
 #define SYS_semop 83
 #define SYS_semctl 84
 #define SYS_futex_wait_timeout 85
+#define SYS_futex_set_owner 86
+#define SYS_futex_clear_owner 87

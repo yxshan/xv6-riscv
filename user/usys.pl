@@ -98,6 +98,8 @@ entry("exit_group");
 entry("futex_wait");
 entry("futex_wake");
 entry("futex_wait_timeout");
+entry("futex_set_owner");
+entry("futex_clear_owner");
 entry("gettid");
 entry("waitpid");
 entry("waitpid_flags");

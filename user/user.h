@@ -4,6 +4,7 @@
 #include "kernel/uio.h"
 #include "kernel/poll.h"
 #include "kernel/sem.h"
+#include "kernel/futex.h"
 
 #define SBRK_ERROR ((char *)-1)
 
@@ -85,6 +86,8 @@ int thread_create(void (*)(void*), void*, void*);
 int futex_wait(uint64, int);
 int futex_wake(uint64, int);
 int futex_wait_timeout(uint64, int, int);
+int futex_set_owner(uint64, int);
+int futex_clear_owner(uint64);
 int gettid(void);
 int waitpid(int, int*);
 int waitpid_flags(int, int*, int);
