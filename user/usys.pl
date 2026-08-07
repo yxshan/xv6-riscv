@@ -58,6 +58,8 @@ entry("shmat");
 entry("shmdt");
 entry("shmrm");
 entry("signal");
+entry("sigaction");
+entry("sigpending");
 entry("sigkill");
 entry("sigreturn");
 entry("chmod");

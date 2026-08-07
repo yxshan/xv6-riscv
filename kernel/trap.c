@@ -45,7 +45,8 @@ trapinithart(void)
 static void
 deliver_signal(struct proc *p)
 {
-  uint64 pending, blocked, h;
+  uint64 pending, blocked, h, mask;
+  int flags, d;
 
   if(p->sig == 0 || p->sigactive)
     return;
@@ -73,6 +74,8 @@ deliver_signal(struct proc *p)
 
     acquire(&p->sig->lock);
     h = p->sig->handlers[sig];
+    mask = p->sig->masks[sig];
+    flags = p->sig->flags[sig];
     release(&p->sig->lock);
 
     if(h == 3){ // SIG_IGN
@@ -82,16 +85,41 @@ deliver_signal(struct proc *p)
       continue;
     }
     if(h == 0 || h == 2){ // SIG_DFL
+      d = sig_default_kind(sig);
+      if(d == SIGACT_IGN){
+        acquire(&p->lock);
+        p->sigpending &= ~(1UL << sig);
+        release(&p->lock);
+        continue;
+      }
+      if(d == SIGACT_STOP){
+        acquire(&p->lock);
+        p->sigpending &= ~(1UL << sig);
+        p->state = STOPPED;
+        release(&p->lock);
+        wakeup(p->parent);
+        return;
+      }
       acquire(&p->lock);
       p->sigpending &= ~(1UL << sig);
       p->killed = 1;
       release(&p->lock);
-      continue;
+      return;
     }
 
     acquire(&p->lock);
     p->sigpending &= ~(1UL << sig);
+    p->sigblocked_saved = p->sigblocked;
+    if(!(flags & SA_NODEFER))
+      p->sigblocked |= (1UL << sig);
+    p->sigblocked |= mask;
+    p->sigblocked &= ~((1UL << SIGKILL) | (1UL << SIGSTOP));
     release(&p->lock);
+    if(flags & SA_RESETHAND){
+      acquire(&p->sig->lock);
+      p->sig->handlers[sig] = 2;
+      release(&p->sig->lock);
+    }
     p->sigactive = 1;
     p->sigframe = *p->trapframe;
     p->trapframe->epc = h - 16;
@@ -106,13 +134,27 @@ deliver_signal(struct proc *p)
        (blocked & (1UL << sig)))
       continue;
     h = p->sig->handlers[sig];
+    mask = p->sig->masks[sig];
+    flags = p->sig->flags[sig];
     if(h == 3){ // SIG_IGN
       p->sig->pending &= ~(1UL << sig);
       continue;
     }
     if(h == 0 || h == 2){ // SIG_DFL
+      d = sig_default_kind(sig);
+      if(d == SIGACT_IGN){
+        p->sig->pending &= ~(1UL << sig);
+        continue;
+      }
       p->sig->pending &= ~(1UL << sig);
       release(&p->sig->lock);
+      if(d == SIGACT_STOP){
+        acquire(&p->lock);
+        p->state = STOPPED;
+        release(&p->lock);
+        wakeup(p->parent);
+        return;
+      }
       acquire(&p->lock);
       p->killed = 1;
       release(&p->lock);
@@ -120,6 +162,18 @@ deliver_signal(struct proc *p)
     }
     p->sig->pending &= ~(1UL << sig);
     release(&p->sig->lock);
+    acquire(&p->lock);
+    p->sigblocked_saved = p->sigblocked;
+    if(!(flags & SA_NODEFER))
+      p->sigblocked |= (1UL << sig);
+    p->sigblocked |= mask;
+    p->sigblocked &= ~((1UL << SIGKILL) | (1UL << SIGSTOP));
+    release(&p->lock);
+    if(flags & SA_RESETHAND){
+      acquire(&p->sig->lock);
+      p->sig->handlers[sig] = 2;
+      release(&p->sig->lock);
+    }
     p->sigactive = 1;
     p->sigframe = *p->trapframe;
     p->trapframe->epc = h - 16;

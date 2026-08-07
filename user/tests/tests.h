@@ -40,5 +40,7 @@ extern struct test mmap_quicktests[];
 extern struct test mmap_slowtests[];
 extern struct test thread_quicktests[];
 extern struct test thread_slowtests[];
+extern struct test signal_quicktests[];
+extern struct test signal_slowtests[];
 
 #endif

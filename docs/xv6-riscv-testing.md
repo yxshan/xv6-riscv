@@ -295,6 +295,16 @@ P3-K3 新增回归用例：
 - `exec_thread_cleanup`：线程调用 `exec` 成功后其他线程被终止，
   新程序作为单线程进程运行并正确输出。
 
+P3-K4 新增回归用例：
+
+- `sigaction_mask`：`sigaction` 设置 `sa_mask` 后，处理器执行期间该信号被阻塞，
+  `sigreturn` 后恢复原阻塞掩码。
+- `sigpending_basic`：阻塞期间发送的信号会出现在 `sigpending` 结果中，
+  解除阻塞后正常投递。
+- `sigaction_reset`：`SA_RESETHAND` 只触发一次，随后恢复默认终止动作。
+- `kill_negative_pgid`：`sigkill(-pgid, sig)` 只向目标进程组投递信号，
+  调用者所在进程组不受影响。
+
 P3-K2b 新增自动化用例：
 
 - `test-xv6.py jobs`：后台启动 `sleep`，`stop %1` 停止、`bg %1` 继续。

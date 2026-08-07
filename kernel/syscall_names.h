@@ -71,6 +71,8 @@
   X(SYS_killpg, killpg) \
   X(SYS_tcsetpgrp, tcsetpgrp) \
   X(SYS_tcgetpgrp, tcgetpgrp) \
-  X(SYS_exit_group, exit_group)
+  X(SYS_exit_group, exit_group) \
+  X(SYS_sigaction, sigaction) \
+  X(SYS_sigpending, sigpending)
 
 #endif

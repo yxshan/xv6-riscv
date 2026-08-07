@@ -20,6 +20,7 @@ static struct testsuite suites[] = {
   { perm_quicktests, perm_slowtests },
   { mmap_quicktests, mmap_slowtests },
   { thread_quicktests, thread_slowtests },
+  { signal_quicktests, signal_slowtests },
 };
 
 // run each test in its own process. run returns 1 if child's exit()

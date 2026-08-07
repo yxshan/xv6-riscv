@@ -153,6 +153,8 @@ extern uint64 sys_killpg(void);
 extern uint64 sys_tcsetpgrp(void);
 extern uint64 sys_tcgetpgrp(void);
 extern uint64 sys_exit_group(void);
+extern uint64 sys_sigaction(void);
+extern uint64 sys_sigpending(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -223,6 +225,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_tcsetpgrp] sys_tcsetpgrp,
 [SYS_tcgetpgrp] sys_tcgetpgrp,
 [SYS_exit_group] sys_exit_group,
+[SYS_sigaction] sys_sigaction,
+[SYS_sigpending] sys_sigpending,
 };
 
 void

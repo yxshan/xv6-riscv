@@ -67,3 +67,5 @@
 #define SYS_tcsetpgrp 64
 #define SYS_tcgetpgrp 65
 #define SYS_exit_group 66
+#define SYS_sigaction 67
+#define SYS_sigpending 68

@@ -107,6 +107,8 @@ struct proc_sig {
   int ref;
   int exiting;                 // 线程组退出流程已开始，避免重复等待
   uint64 handlers[NSIG]; // 信号处理函数表
+  uint64 masks[NSIG];   // 进入处理器时额外阻塞的信号
+  int flags[NSIG];      // SA_NODEFER / SA_RESETHAND 等
   uint64 pending;        // 线程组待处理信号
 };
 
@@ -158,6 +160,7 @@ struct proc {
   struct proc_sig *sig;        // 共享信号处理表与线程组待处理信号
   uint64 sigpending;           // 当前线程待处理信号位图
   uint64 sigblocked;           // 当前线程信号阻塞掩码
+  uint64 sigblocked_saved;     // 进入信号处理前保存的阻塞掩码
   struct trapframe sigframe;   // 进入信号处理前保存的用户现场
   int sigactive;               // 当前是否正在执行信号处理函数
 

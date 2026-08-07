@@ -151,8 +151,11 @@ void
 proc_sig_copy(struct proc_sig *dst, struct proc_sig *src)
 {
   acquire(&src->lock);
-  for(int i = 0; i < NSIG; i++)
+  for(int i = 0; i < NSIG; i++){
     dst->handlers[i] = src->handlers[i];
+    dst->masks[i] = src->masks[i];
+    dst->flags[i] = src->flags[i];
+  }
   release(&src->lock);
 }
 
@@ -210,6 +213,7 @@ found:
   p->sig = 0;
   p->sigpending = 0;
   p->sigblocked = 0;
+  p->sigblocked_saved = 0;
   p->sigactive = 0;
   p->stop_pending = 0;
   p->continued = 0;
@@ -274,6 +278,7 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->sigpending = 0;
   p->sigblocked = 0;
+  p->sigblocked_saved = 0;
   p->sigactive = 0;
   p->state = UNUSED;
 }
@@ -679,6 +684,7 @@ kthread_create(void (*fn)(void*), void *arg)
     p->sz = 0;
     p->sigpending = 0;
     p->sigblocked = 0;
+    p->sigblocked_saved = 0;
     p->sigactive = 0;
     p->stop_pending = 0;
     p->continued = 0;
@@ -1102,6 +1108,46 @@ ksetpriority(int pid, int prio)
   return -1;
 }
 
+static uint64
+sig_encode_handler(uint64 h)
+{
+  if(h == SIG_DFL)
+    return 2;
+  if(h == SIG_IGN)
+    return 3;
+  return h + 16;
+}
+
+static uint64
+sig_decode_handler(uint64 h)
+{
+  if(h == 0 || h == 2)
+    return SIG_DFL;
+  if(h == 3)
+    return SIG_IGN;
+  return h - 16;
+}
+
+// 标准信号的默认动作。
+int
+sig_default_kind(int sig)
+{
+  switch(sig){
+  case SIGCONT:
+    return SIGACT_CONT;
+  case SIGCHLD:
+  case SIGURG:
+    return SIGACT_IGN;
+  case SIGSTOP:
+  case SIGTSTP:
+  case SIGTTIN:
+  case SIGTTOU:
+    return SIGACT_STOP;
+  default:
+    return SIGACT_TERM;
+  }
+}
+
 // 设置当前进程的信号处理函数。
 int
 ksignal(int sig, uint64 handler)
@@ -1110,23 +1156,77 @@ ksignal(int sig, uint64 handler)
 
   if(sig <= 0 || sig >= NSIG || p->sig == 0)
     return -1;
+  if(sig == SIGKILL || sig == SIGSTOP)
+    return -1;
   acquire(&p->sig->lock);
-  if(handler == SIG_DFL)
-    p->sig->handlers[sig] = 2;
-  else if(handler == SIG_IGN)
-    p->sig->handlers[sig] = 3;
-  else
-    // 用户程序从地址 0 开始；用 handler+16 编码普通处理函数。
-    p->sig->handlers[sig] = handler + 16;
+  p->sig->handlers[sig] = sig_encode_handler(handler);
+  p->sig->masks[sig] = 0;
+  p->sig->flags[sig] = 0;
   release(&p->sig->lock);
   return 0;
 }
 
-// 向单个线程递送信号：默认动作终止线程，自定义处理函数进入待处理位图。
+uint64
+sys_sigaction(void)
+{
+  struct proc *p = myproc();
+  struct sigaction act, old;
+  int sig;
+  uint64 actaddr, oldaddr;
+
+  argint(0, &sig);
+  argaddr(1, &actaddr);
+  argaddr(2, &oldaddr);
+  if(sig <= 0 || sig >= NSIG || p->sig == 0)
+    return -1;
+  if(sig == SIGKILL || sig == SIGSTOP)
+    return -1;
+  if(actaddr != 0 &&
+     copyin(p->pagetable, (char*)&act, actaddr, sizeof(act)) < 0)
+    return -1;
+
+  acquire(&p->sig->lock);
+  old.sa_handler = sig_decode_handler(p->sig->handlers[sig]);
+  old.sa_mask = p->sig->masks[sig];
+  old.sa_flags = p->sig->flags[sig];
+  if(oldaddr != 0 &&
+     copyout(p->pagetable, oldaddr, (char*)&old, sizeof(old)) < 0){
+    release(&p->sig->lock);
+    return -1;
+  }
+  if(actaddr != 0){
+    p->sig->handlers[sig] = sig_encode_handler(act.sa_handler);
+    p->sig->masks[sig] = act.sa_mask & ~(1UL << SIGKILL) & ~(1UL << SIGSTOP);
+    p->sig->flags[sig] = act.sa_flags;
+  }
+  release(&p->sig->lock);
+  return 0;
+}
+
+uint64
+sys_sigpending(void)
+{
+  struct proc *p = myproc();
+  uint64 setaddr, pending;
+
+  argaddr(0, &setaddr);
+  pending = p->sigpending;
+  if(p->sig){
+    acquire(&p->sig->lock);
+    pending |= p->sig->pending;
+    release(&p->sig->lock);
+  }
+  if(copyout(p->pagetable, setaddr, (char*)&pending, sizeof(pending)) < 0)
+    return -1;
+  return 0;
+}
+
+// 向单个线程递送信号：默认动作按标准语义处理，自定义处理函数进入待处理位图。
 static int
 signal_deliver_thread(struct proc *p, int sig)
 {
   uint64 h;
+  int d;
 
   if(p == 0 || p->sig == 0 || sig <= 0 || sig >= NSIG)
     return -1;
@@ -1164,32 +1264,29 @@ signal_deliver_thread(struct proc *p, int sig)
   h = p->sig->handlers[sig];
   release(&p->sig->lock);
 
-  if(sig == SIGTSTP){
-    if(h == 3) // SIG_IGN
-      return 0;
-    if(h == 0 || h == 2){ // SIG_DFL: 与 SIGSTOP 一样延迟停止
-      acquire(&p->lock);
-      p->stop_pending = 1;
-      if(p->state == SLEEPING)
-        p->state = RUNNABLE;
-      release(&p->lock);
-      return 0;
-    }
-  }
-
   if(h == 3) // SIG_IGN
     return 0;
 
-  acquire(&p->lock);
   if(h == 0 || h == 2){ // SIG_DFL
-    p->killed = 1;
+    d = sig_default_kind(sig);
+    if(d == SIGACT_IGN)
+      return 0;
+    acquire(&p->lock);
+    if(d == SIGACT_STOP){
+      p->stop_pending = 1;
+    } else {
+      p->killed = 1;
+    }
     if(p->state == SLEEPING)
       p->state = RUNNABLE;
-  } else {
-    p->sigpending |= (1UL << sig);
-    if(p->state == SLEEPING)
-      p->state = RUNNABLE;
+    release(&p->lock);
+    return 0;
   }
+
+  acquire(&p->lock);
+  p->sigpending |= (1UL << sig);
+  if(p->state == SLEEPING)
+    p->state = RUNNABLE;
   release(&p->lock);
   return 0;
 }
@@ -1211,7 +1308,8 @@ signal_group(struct proc *leader, int sig)
     }
     return 0;
   }
-  if(sig == SIGSTOP || sig == SIGCONT || sig == SIGTSTP){
+  if(sig == SIGSTOP || sig == SIGCONT || sig == SIGTSTP ||
+     sig == SIGTTIN || sig == SIGTTOU){
     for(p = proc; p < &proc[NPROC]; p++){
       if(p->state != UNUSED && p->tgid == leader->tgid)
         signal_deliver_thread(p, sig);
@@ -1243,6 +1341,8 @@ ksigkill(int pid, int sig)
 {
   struct proc *p, *leader = 0;
 
+  if(pid < 0)
+    return kkillpg(-pid, sig);
   if(sig <= 0 || sig >= NSIG)
     return -1;
 
@@ -1288,6 +1388,7 @@ sys_sigreturn(void)
   if(!p->sigactive)
     return -1;
   // 恢复进入信号处理前保存的用户现场。
+  p->sigblocked = p->sigblocked_saved;
   *p->trapframe = p->sigframe;
   p->sigactive = 0;
   return 0;
@@ -1308,7 +1409,7 @@ sys_sigprocmask(void)
   if(setaddr != 0 &&
      copyin(p->pagetable, (char*)&set, setaddr, sizeof(set)) < 0)
     return -1;
-  if(set & (1UL << SIGKILL))
+  if(set & ((1UL << SIGKILL) | (1UL << SIGSTOP)))
     return -1;
 
   old = p->sigblocked;

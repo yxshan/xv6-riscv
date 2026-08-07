@@ -1,4 +1,5 @@
 #include "kernel/param.h"
+#include "kernel/signal.h"
 
 #define SBRK_ERROR ((char *)-1)
 
@@ -40,6 +41,8 @@ uint64 shmat(int);
 int shmdt(int);
 int shmrm(int);
 int signal(int, uint64);
+int sigaction(int, const struct sigaction*, struct sigaction*);
+int sigpending(uint64*);
 int sigkill(int, int);
 void sigreturn(void);
 int chmod(const char*, int);

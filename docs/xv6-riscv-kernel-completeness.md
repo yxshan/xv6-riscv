@@ -70,9 +70,17 @@
 
 ### P3-K4：信号完整性
 
-状态：待开始
+状态：已完成
 
-- `sigaction`、`sigpending`、进程组信号投递、标准信号编号补齐。
+- 补齐标准信号编号，`SIGSTOP` 修正为 19，并新增 `SIGCHLD`、`SIGTERM`、
+  `SIGSEGV`、`SIGPIPE` 等常用信号。
+- 新增 `sigaction` / `sigpending`，`sigaction` 支持 `sa_mask`、
+  `SA_NODEFER`、`SA_RESETHAND`，`sigreturn` 恢复进入处理器前的阻塞掩码。
+- 新增标准默认动作表：终止、忽略、停止、继续；`SIGCHLD` / `SIGURG`
+  默认忽略，`SIGTSTP` / `SIGTTIN` / `SIGTTOU` 默认停止。
+- `sigkill(-pgid, sig)` 支持按进程组投递信号。
+- 新增 `sigaction_mask`、`sigpending_basic`、`sigaction_reset`、
+  `kill_negative_pgid` 回归测试。
 
 ### P3-K5：系统调用面补齐
 
