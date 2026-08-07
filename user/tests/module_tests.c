@@ -570,11 +570,16 @@ dynmod_multi(char *s)
 
   if(module_call(KMOD_DYN_SAMPLE, 1, 0, 0) != 0x1234 ||
      module_call(KMOD_DYN_TWO, 1, 0, 0) != 0xABCD ||
-     module_call(KMOD_DYN_TWO, 2, 0, 0) != (uint64)'d'){
+     module_call(KMOD_DYN_TWO, 2, 0, 0) != (uint64)'d' ||
+     module_call(KMOD_DYN_TWO, 3, 0, 0) == 0){
     printf("%s: multi module call failed\n", s);
     exit(1);
   }
-  if(module_unload(0) != 0 || module_unload(1) != 0){
+  if(module_unload(0) != -1){
+    printf("%s: dependency did not block unload\n", s);
+    exit(1);
+  }
+  if(module_unload(1) != 0 || module_unload(0) != 0){
     printf("%s: multi module unload failed\n", s);
     exit(1);
   }

@@ -22,10 +22,12 @@
 #include "elf.h"
 #include "module.h"
 #include "dynmod.h"
+#include "symbol.h"
 
 extern struct kmod __kmods_start[], __kmods_end[];
 extern struct sysmod __kmod_sys_start[], __kmod_sys_end[];
 extern const struct kmod_hooks __kmod_hooks_start[], __kmod_hooks_end[];
+extern struct kmod_symbol __ksyms_start[], __ksyms_end[];
 
 static struct kmod *order[KMOD_MAX_MODULES];
 static int nmods;
@@ -39,6 +41,7 @@ static int current_dynslot;
 
 struct dynslot {
   int used;
+  int refs;
   void (*exit)(void);
 };
 static struct dynslot dynslots[DYNMOD_NUM];
@@ -59,6 +62,20 @@ sort_modules(void)
     }
     order[j + 1] = key;
   }
+}
+
+static int
+kmod_streq(const char *a, const char *b)
+{
+  if(a == 0 || b == 0)
+    return 0;
+  while(*a && *b){
+    if(*a != *b)
+      return 0;
+    a++;
+    b++;
+  }
+  return *a == *b;
 }
 
 void
@@ -148,6 +165,55 @@ module_unregister(int id)
     if(dynsys[i].id == id){
       dynsys[i] = dynsys[ndyn - 1];
       ndyn--;
+      release(&dynlock);
+      return 0;
+    }
+  }
+  release(&dynlock);
+  return -1;
+}
+
+uint64
+module_lookup_symbol(const char *name)
+{
+  if(name == 0)
+    return 0;
+  for(struct kmod_symbol *s = __ksyms_start; s < __ksyms_end; s++){
+    if(kmod_streq(s->name, name))
+      return (uint64)s->addr;
+  }
+  return 0;
+}
+
+int
+module_require(int id)
+{
+  acquire(&dynlock);
+  for(int i = 0; i < ndyn; i++){
+    if(dynsys[i].id == id && dynsys[i].slot > 0){
+      int s = dynsys[i].slot - 1;
+      if(!dynslots[s].used){
+        release(&dynlock);
+        return -1;
+      }
+      dynslots[s].refs++;
+      release(&dynlock);
+      return 0;
+    }
+  }
+  release(&dynlock);
+  return -1;
+}
+
+int
+module_release(int id)
+{
+  acquire(&dynlock);
+  for(int i = 0; i < ndyn; i++){
+    if(dynsys[i].id == id && dynsys[i].slot > 0){
+      int s = dynsys[i].slot - 1;
+      if(dynslots[s].used && dynslots[s].refs > 0)
+        dynslots[s].refs--;
       release(&dynlock);
       return 0;
     }
@@ -375,6 +441,9 @@ module_load_elf(uint64 src, int len, uint64 base)
   api.proccount = proccount;
   api.freemem = freemem;
   api.ticks = ticks;
+  api.lookup_symbol = module_lookup_symbol;
+  api.module_require = module_require;
+  api.module_release = module_release;
 
   r = ((int (*)(struct kmod_api*))entry)(&api);
   return r;
@@ -405,6 +474,7 @@ module_load(uint64 src, int len)
     dyn_remove_slot_locked(slot + 1);
     release(&dynlock);
     dynslots[slot].used = 0;
+    dynslots[slot].refs = 0;
     dynslots[slot].exit = 0;
     current_dynslot = 0;
     memset((void*)base, 0, DYNMOD_SIZE);
@@ -412,6 +482,7 @@ module_load(uint64 src, int len)
   }
 
   dynslots[slot].used = 1;
+  dynslots[slot].refs = 0;
   current_dynslot = 0;
   return slot;
 }
@@ -423,6 +494,8 @@ module_unload(int slot)
 
   if(slot < 0 || slot >= DYNMOD_NUM || !dynslots[slot].used)
     return -1;
+  if(dynslots[slot].refs > 0)
+    return -1;
 
   base = DYNMOD_BASE + (uint64)slot * DYNMOD_SIZE;
   if(dynslots[slot].exit)
@@ -431,6 +504,7 @@ module_unload(int slot)
   dyn_remove_slot_locked(slot + 1);
   release(&dynlock);
   dynslots[slot].used = 0;
+  dynslots[slot].refs = 0;
   dynslots[slot].exit = 0;
   memset((void*)base, 0, DYNMOD_SIZE);
   return 0;

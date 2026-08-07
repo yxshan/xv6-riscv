@@ -113,8 +113,10 @@
 - 新增 System V 风格信号量：`semget` / `semop` / `semctl`，支持
   `IPC_CREAT`、`IPC_NOWAIT`、`GETVAL`、`SETVAL`、`IPC_RMID`。
 - 新增 `futex_wait_timeout`，超时后返回失败，值不匹配时立即返回。
-- 内核符号导出表、模块参数/依赖、卸载安全检查待下一批补充。
+- 新增内核符号导出表 `.ksyms`，动态模块可通过 `lookup_symbol` 解析内核函数。
+- 新增动态模块依赖引用计数：被依赖模块不可先卸载，模块卸载前校验引用。
 - 新增 `sem_basic`、`futex_timeout` 回归测试。
+- 模块参数注册待下一批补充。
 
 ### P3-K8：设备与时钟
 
