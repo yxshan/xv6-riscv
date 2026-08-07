@@ -517,7 +517,7 @@ expand_aliases(char *out, int max, char *in)
     e++;
   int nl = e - s;
   for(int i = 0; i < naliases; i++){
-    if(startswith(aliases[i], s) && aliases[i][nl] == '='){
+    if(memcmp(aliases[i], s, nl) == 0 && aliases[i][nl] == '='){
       char *val = aliases[i] + nl + 1;
       int vl = strlen(val);
       int rest = strlen(e);
