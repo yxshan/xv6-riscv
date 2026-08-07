@@ -8,7 +8,7 @@
 # ./test-xv6.py crash  (runs the crash tests)
 # ./test-xv6.py log (runs the log crash test)
 
-import argparse, os, inspect, re, signal, subprocess, sys, time
+import argparse, os, inspect, re, select, signal, subprocess, sys, time
 import atexit
 import shutil
 from subprocess import run
@@ -115,7 +115,13 @@ class QEMU(object):
             _active_qemus.remove(self)
 
     def read(self):
-        buf = os.read(self.proc.stdout.fileno(), 4096)
+        r, _, _ = select.select([self.proc.stdout], [], [], 5)
+        if not r:
+            return
+        try:
+            buf = os.read(self.proc.stdout.fileno(), 4096)
+        except BlockingIOError:
+            return
         self.outbytes.extend(buf)
         self.output = self.outbytes.decode("utf-8", "replace")
 

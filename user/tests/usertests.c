@@ -6,6 +6,8 @@
 
 char buf[BUFSZ];
 
+#define TEST_TIMEOUT_TICKS 300
+
 struct testsuite {
   struct test *quick;
   struct test *slow;
@@ -35,6 +37,7 @@ run(void f(char *), char *s)
 {
   int pid;
   int xstatus;
+  int r;
 
   printf("test %s: ", s);
   if((pid = fork()) < 0) {
@@ -45,7 +48,20 @@ run(void f(char *), char *s)
     f(s);
     exit(0);
   } else {
-    wait(&xstatus);
+    for(int i = 0; i < TEST_TIMEOUT_TICKS; i++){
+      r = waitpid_flags(pid, &xstatus, WNOHANG);
+      if(r == pid)
+        break;
+      if(r != -1)
+        break;
+      pause(1);
+    }
+    if(r != pid){
+      kill(pid);
+      waitpid(pid, &xstatus);
+      printf("TIMEOUT\n");
+      return 0;
+    }
     if(xstatus != 0)
       printf("FAILED\n");
     else

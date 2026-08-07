@@ -10,6 +10,12 @@
 4. 崩溃恢复测试：`./test-xv6.py crash`
 5. 内核自测模块：`kernel/modules/selftest.c`
 
+自动化稳定性约定：
+
+- `test-xv6.py` 的 QEMU 输出读取为非阻塞，`monitor` 超时不会被无输出卡死。
+- `usertests` 驱动为每个测试增加 300 tick 的单测超时；超时后终止该测试并标记
+  `TIMEOUT`，避免单个用例挂起拖垮整个阶段。
+
 ## 2. 用户态回归套件
 
 `usertests` 不再是一个大文件，而是按子系统拆分的多个源文件：
