@@ -25,7 +25,7 @@
 
 | 命令 | 说明 | 使用案例 |
 |---|---|---|
-| `sleep` | 按 tick 数睡眠 | `sleep 100` |
+| `sleep` | 按 tick 数睡眠，约 10 tick = 1 秒 | `sleep 1000` |
 | `kill` | 终止指定进程 | `kill 5` |
 | `ps` | 读取 `/proc` 显示进程列表 | `ps` |
 | `id` | 显示 uid/gid/euid/egid | `id` |
@@ -178,15 +178,18 @@ cat append.txt
 ### 6.4 后台作业与作业控制
 
 ```sh
-sleep 20 &
+sleep 1000 &
 jobs
 stop %1
 jobs
 bg %1
-fg %1
+kill <pid>
+jobs
 ```
 
-`jobs` 会显示作业编号、pid 和运行/停止状态；`fg %1` 会等待 `sleep` 结束。
+`jobs` 会显示作业编号、pid 和运行/停止状态。`sleep 1000` 约持续 100 秒，
+足够手动执行 `stop` / `bg`；`<pid>` 替换为 `jobs` 输出中的 pid，
+最后 `kill <pid>` 结束后台任务，避免等待过久。
 
 ### 6.5 历史、变量与别名
 
