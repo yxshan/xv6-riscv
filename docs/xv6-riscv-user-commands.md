@@ -96,7 +96,7 @@ logstress f1 f2 f3
 |---|---|---|
 | `cd` | 切换目录 | `cd /tmp` |
 | `pwd` | 打印当前目录 | `pwd` |
-| `exit` | 退出 shell | `exit` |
+| `exit` | 退出当前 shell；`init` 会重新启动一个新的 shell | `exit` |
 | `jobs` | 列出后台作业 | `jobs` |
 | `fg` | 把作业调到前台 | `fg %1` |
 | `bg` | 继续后台作业 | `bg %1` |
