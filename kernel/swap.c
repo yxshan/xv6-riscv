@@ -22,6 +22,8 @@ static struct spinlock swaplock;
 static uint64 swapouts;
 static uint64 swapins;
 
+extern struct proc proc[NPROC];
+
 void
 swapinit(void)
 {
@@ -105,12 +107,11 @@ swap_read(uint64 pa, int slot)
   return 0;
 }
 
-// 从当前进程换出一页，优先选择地址最高的用户页。
+// 从指定进程换出一页，优先选择地址最高的用户页。
 // COW 页先通过 cow_handle() 私有化，再写入交换盘。
-int
-swap_evict(void)
+static int
+swap_evict_proc(struct proc *p)
 {
-  struct proc *p = myproc();
   pte_t *pte;
   uint64 va, pa, flags;
   int slot;
@@ -148,6 +149,28 @@ swap_evict(void)
 next:
     if(va == 0)
       break;
+  }
+  return -1;
+}
+
+int
+swap_evict(void)
+{
+  return swap_evict_proc(myproc());
+}
+
+// 内存不足时优先从非运行进程换出一页，避免 OOM 分配直接失败。
+int
+swap_evict_any(void)
+{
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    int ok = p->state == SLEEPING || p->state == STOPPED;
+    release(&p->lock);
+    if(ok && swap_evict_proc(p) == 0)
+      return 0;
   }
   return -1;
 }

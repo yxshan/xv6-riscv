@@ -239,6 +239,7 @@ int             swap_read(uint64, int);
 void            swap_free(int);
 uint64          swap_flags(int);
 int             swap_evict(void);
+int             swap_evict_any(void);
 uint64          sys_swapout(void);
 uint64          sys_swapinfo(void);
 

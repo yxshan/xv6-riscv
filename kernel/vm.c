@@ -648,6 +648,8 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
     mem = (uint64)kalloc();
     if(mem == 0 && swap_evict() == 0)
       mem = (uint64)kalloc();
+    if(mem == 0 && swap_evict_any() == 0)
+      mem = (uint64)kalloc();
     if(mem == 0)
       return 0;
     if(swap_read(mem, slot) < 0){
@@ -673,6 +675,8 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   }
   mem = (uint64) kalloc();
   if(mem == 0 && swap_evict() == 0)
+    mem = (uint64) kalloc();
+  if(mem == 0 && swap_evict_any() == 0)
     mem = (uint64) kalloc();
   if(mem == 0)
     return 0;
