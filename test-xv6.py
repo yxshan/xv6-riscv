@@ -85,7 +85,7 @@ class QEMU(object):
     def save_output(self):
       try:
         with open("test-xv6.out", "w") as f:
-            f.write(self.out)
+            f.write(self.output)
             f.close()
       except OSError as e:
         print("Provided a bad results path. Error:", e)     
@@ -339,6 +339,31 @@ def test_jobs():
     q.monitor("^\\[1\\] .* stopped", timeout=30)
     q.cmd("bg %1\n")
     q.monitor("^\\[1\\] .* running", timeout=30)
+    q.stop()
+    print("OK")
+
+def test_shell():
+    print("Test shell features")
+    q = QEMU(True)
+    q.cmd("pwd\n")
+    q.monitor("^/", timeout=30)
+    q.cmd("export GREETING=hello\n")
+    q.cmd("echo $GREETING\n")
+    q.monitor(".*hello", timeout=30)
+    q.cmd("history\n")
+    q.monitor(".*1  pwd", timeout=30)
+    q.cmd("pwd\n")
+    q.monitor(".*/", timeout=30)
+    q.cmd("!!\n")
+    q.monitor(".*/", timeout=30)
+    q.cmd("alias hi=echo hi\n")
+    q.cmd("hi\n")
+    q.monitor(".*hi$", timeout=30)
+    q.cmd("cat no-such-file || echo OR-OK\n")
+    q.monitor(".*OR-OK", timeout=30)
+    q.cmd("echo one && echo two\n")
+    q.monitor(".*one", timeout=30)
+    q.monitor(".*two", timeout=30)
     q.stop()
     print("OK")
 

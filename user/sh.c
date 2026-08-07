@@ -19,6 +19,7 @@
 #define LIST  4
 #define BACK  5
 #define AND   6
+#define OR    7
 
 #define MAXARGS 10
 
@@ -64,6 +65,12 @@ struct andcmd {
   struct cmd *right;
 };
 
+struct orcmd {
+  int type;
+  struct cmd *left;
+  struct cmd *right;
+};
+
 #define MAXJOBS 16
 #define JOB_RUNNING 0
 #define JOB_STOPPED 1
@@ -81,6 +88,7 @@ int fork1(void);  // Fork but panics on failure.
 void panic(char*);
 struct cmd *parsecmd(char*);
 void runcmd(struct cmd*) __attribute__((noreturn));
+static void addhistory(char *s);
 
 // 执行命令树。正常情况下不会返回。
 void
@@ -88,6 +96,7 @@ runcmd(struct cmd *cmd)
 {
   int p[2];
   struct andcmd *acmd;
+  struct orcmd *ocmd;
   struct backcmd *bcmd;
   struct execcmd *ecmd;
   struct listcmd *lcmd;
@@ -172,6 +181,19 @@ runcmd(struct cmd *cmd)
     if(astatus == 0){
       if(fork1() == 0)
         runcmd(acmd->right);
+      wait(0);
+    }
+    break;
+
+  case OR:
+    // 左边失败才运行右边。
+    ocmd = (struct orcmd*)cmd;
+    if(fork1() == 0)
+      runcmd(ocmd->left);
+    wait(&astatus);
+    if(astatus != 0){
+      if(fork1() == 0)
+        runcmd(ocmd->right);
       wait(0);
     }
     break;
@@ -278,10 +300,229 @@ startswith(char *s, char *p)
   return 1;
 }
 
+static int
+iscmd(char *s, char *name)
+{
+  int n = 0;
+
+  while(name[n]){
+    if(s[n] != name[n])
+      return 0;
+    n++;
+  }
+  return s[n] == '\n' || s[n] == ' ' || s[n] == '\t' || s[n] == 0;
+}
+
+#define MAXHIST 16
+#define MAXVARS 16
+#define MAXALIAS 16
+
+static char history[MAXHIST][100];
+static int nhistory;
+static char vars[MAXVARS][64];
+static int nvars;
+static char aliases[MAXALIAS][100];
+static int naliases;
+
+static void
+addhistory(char *s)
+{
+  char *p = s;
+  int n = 0;
+
+  while(*p == ' ' || *p == '\t')
+    p++;
+  if(*p == 0 || *p == '\n')
+    return;
+  if(nhistory == MAXHIST){
+    for(int i = 1; i < MAXHIST; i++)
+      memmove(history[i - 1], history[i], sizeof(history[i]));
+    nhistory--;
+  }
+  while(*p && n < (int)sizeof(history[nhistory]) - 1){
+    history[nhistory][n++] = *p++;
+  }
+  history[nhistory][n] = 0;
+  nhistory++;
+}
+
+static void
+expand_history(char *buf, int nbuf)
+{
+  char tmp[256];
+  int n;
+
+  if(buf[0] != '!' || nhistory == 0)
+    return;
+  if(buf[1] == '!'){
+    n = nhistory - 1;
+  } else if(buf[1] >= '0' && buf[1] <= '9'){
+    n = atoi(buf + 1) - 1;
+    if(n < 0 || n >= nhistory)
+      return;
+  } else {
+    return;
+  }
+  int len = strlen(history[n]);
+  int rest = strlen(buf + (buf[1] == '!' ? 2 : 1 + (buf[1] >= '0' && buf[1] <= '9' ? 1 : 0)));
+  if(len + rest + 1 > (int)sizeof(tmp))
+    return;
+  memmove(tmp, history[n], len);
+  memmove(tmp + len, buf + (buf[1] == '!' ? 2 : 1 + (buf[1] >= '0' && buf[1] <= '9' ? 1 : 0)), rest + 1);
+  if(len + rest + 1 <= nbuf)
+    memmove(buf, tmp, len + rest + 1);
+}
+
+static void
+setvar(char *name, char *value)
+{
+  char entry[64];
+  int nl = strlen(name);
+  int vl = strlen(value);
+
+  if(nl == 0 || nl + vl + 2 > (int)sizeof(entry))
+    return;
+  memmove(entry, name, nl);
+  entry[nl] = '=';
+  memmove(entry + nl + 1, value, vl + 1);
+  for(int i = 0; i < nvars; i++){
+    if(startswith(vars[i], name) && vars[i][nl] == '='){
+      memmove(vars[i], entry, strlen(entry) + 1);
+      return;
+    }
+  }
+  if(nvars < MAXVARS)
+    memmove(vars[nvars++], entry, strlen(entry) + 1);
+}
+
+static int
+unsetvar(char *name)
+{
+  int nl = strlen(name);
+
+  for(int i = 0; i < nvars; i++){
+    if(startswith(vars[i], name) && vars[i][nl] == '='){
+      memmove(vars[i], vars[nvars - 1], strlen(vars[nvars - 1]) + 1);
+      nvars--;
+      return 0;
+    }
+  }
+  return -1;
+}
+
+static void
+expand_vars(char *out, int max, char *in)
+{
+  int oi = 0;
+
+  for(int i = 0; in[i] && oi < max - 1; i++){
+    if(in[i] == '$' && (in[i + 1] == '_' ||
+       (in[i + 1] >= 'a' && in[i + 1] <= 'z') ||
+       (in[i + 1] >= 'A' && in[i + 1] <= 'Z') ||
+       (in[i + 1] >= '0' && in[i + 1] <= '9'))){
+      int j = i + 1;
+      while(in[j] == '_' ||
+            (in[j] >= 'a' && in[j] <= 'z') ||
+            (in[j] >= 'A' && in[j] <= 'Z') ||
+            (in[j] >= '0' && in[j] <= '9'))
+        j++;
+      char name[32];
+      int nl = j - (i + 1);
+      if(nl < (int)sizeof(name)){
+        memmove(name, in + i + 1, nl);
+        name[nl] = 0;
+        for(int v = 0; v < nvars; v++){
+          if(startswith(vars[v], name) && vars[v][nl] == '='){
+            char *val = vars[v] + nl + 1;
+            int vl = strlen(val);
+            if(oi + vl < max - 1){
+              memmove(out + oi, val, vl);
+              oi += vl;
+            }
+            i = j - 1;
+            goto next;
+          }
+        }
+      }
+      out[oi++] = '$';
+      continue;
+    }
+    out[oi++] = in[i];
+next:;
+  }
+  out[oi] = 0;
+}
+
+static void
+setalias(char *name, char *value)
+{
+  char entry[100];
+  int nl = strlen(name);
+  int vl = strlen(value);
+
+  if(nl == 0 || nl + vl + 2 > (int)sizeof(entry))
+    return;
+  memmove(entry, name, nl);
+  entry[nl] = '=';
+  memmove(entry + nl + 1, value, vl + 1);
+  for(int i = 0; i < naliases; i++){
+    if(startswith(aliases[i], name) && aliases[i][nl] == '='){
+      memmove(aliases[i], entry, strlen(entry) + 1);
+      return;
+    }
+  }
+  if(naliases < MAXALIAS)
+    memmove(aliases[naliases++], entry, strlen(entry) + 1);
+}
+
+static int
+unsetalias(char *name)
+{
+  int nl = strlen(name);
+
+  for(int i = 0; i < naliases; i++){
+    if(startswith(aliases[i], name) && aliases[i][nl] == '='){
+      memmove(aliases[i], aliases[naliases - 1], strlen(aliases[naliases - 1]) + 1);
+      naliases--;
+      return 0;
+    }
+  }
+  return -1;
+}
+
+static void
+expand_aliases(char *out, int max, char *in)
+{
+  char *s = in;
+  int first = 0;
+
+  while(*s == ' ' || *s == '\t')
+    s++;
+  first = s - in;
+  char *e = s;
+  while(*e && *e != ' ' && *e != '\t' && *e != '\n')
+    e++;
+  int nl = e - s;
+  for(int i = 0; i < naliases; i++){
+    if(startswith(aliases[i], s) && aliases[i][nl] == '='){
+      char *val = aliases[i] + nl + 1;
+      int vl = strlen(val);
+      int rest = strlen(e);
+      if(first + vl + rest + 1 > max)
+        break;
+      memmove(out, in, first);
+      memmove(out + first, val, vl);
+      memmove(out + first + vl, e, rest + 1);
+      return;
+    }
+  }
+  memmove(out, in, strlen(in) + 1);
+}
+
 int
 main(void)
 {
-  static char buf[100];
+  static char buf[256];
   int fd;
 
   // 保证标准输入/输出/错误三个描述符可用，否则后续命令无法工作。
@@ -296,12 +537,100 @@ main(void)
 
   // 主循环：读一行命令，解析并执行。
   while(getcmd(buf, sizeof(buf)) >= 0){
+    char expanded[256];
     char *cmd = buf;
+    expand_history(buf, sizeof(buf));
+    expand_aliases(expanded, sizeof(expanded), buf);
+    expand_vars(buf, sizeof(buf), expanded);
+    addhistory(buf);
     reap_jobs();
     while (*cmd == ' ' || *cmd == '\t')
       cmd++;
     if (*cmd == '\n') // is a blank command
       continue;
+    if(iscmd(cmd, "exit"))
+      break;
+    if(iscmd(cmd, "pwd")){
+      char cwd[MAXPATH];
+      if(getcwd(cwd, sizeof(cwd)) == 0)
+        printf("%s\n", cwd);
+      else
+        fprintf(2, "pwd: failed\n");
+      continue;
+    }
+    if(iscmd(cmd, "history")){
+      for(int i = 0; i < nhistory; i++)
+        printf("%d  %s", i + 1, history[i]);
+      continue;
+    }
+    if(startswith(cmd, "export ") || iscmd(cmd, "export")){
+      char *p = cmd + 6;
+      while(*p == ' ' || *p == '\t')
+        p++;
+      char *eq = strchr(p, '=');
+      if(eq){
+        *eq = 0;
+        char *v = eq + 1;
+        while(*v && *v != '\n')
+          v++;
+        *v = 0;
+        setvar(p, eq + 1);
+      } else if(*p && *p != '\n'){
+        for(int i = 0; i < nvars; i++)
+          printf("%s\n", vars[i]);
+      }
+      continue;
+    }
+    if(startswith(cmd, "unset ")){
+      char *p = cmd + 6;
+      while(*p == ' ' || *p == '\t')
+        p++;
+      char *e = p;
+      while(*e && *e != '\n' && *e != ' ' && *e != '\t')
+        e++;
+      *e = 0;
+      unsetvar(p);
+      continue;
+    }
+    if(iscmd(cmd, "vars")){
+      for(int i = 0; i < nvars; i++)
+        printf("%s\n", vars[i]);
+      continue;
+    }
+    if(startswith(cmd, "alias ") || iscmd(cmd, "alias")){
+      char *p = cmd + 5;
+      while(*p == ' ' || *p == '\t')
+        p++;
+      char *eq = strchr(p, '=');
+      if(eq){
+        *eq = 0;
+        char *v = eq + 1;
+        while(*v && *v != '\n')
+          v++;
+        *v = 0;
+        setalias(p, eq + 1);
+      } else {
+        for(int i = 0; i < naliases; i++)
+          printf("%s\n", aliases[i]);
+      }
+      continue;
+    }
+    if(startswith(cmd, "unalias ")){
+      char *p = cmd + 8;
+      while(*p == ' ' || *p == '\t')
+        p++;
+      char *e = p;
+      while(*e && *e != '\n' && *e != ' ' && *e != '\t')
+        e++;
+      *e = 0;
+      unsetalias(p);
+      continue;
+    }
+    if(iscmd(cmd, "aliases")){
+      for(int i = 0; i < naliases; i++)
+        printf("%s\n", aliases[i]);
+      continue;
+    }
     if(cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' '){
       // cd 必须由 shell 父进程执行，而不是在子进程中。
       cmd[strlen(cmd)-1] = 0;  // chop \n
@@ -366,7 +695,7 @@ main(void)
       j->state = JOB_STOPPED;
       printf("[%d] %d stopped %s", (int)(j - jobs) + 1, j->pid, j->cmd);
     } else {
-      char childcmd[100];
+      char childcmd[256];
       int n = 0;
       while(cmd[n] && n < sizeof(childcmd) - 1){
         childcmd[n] = cmd[n];
@@ -530,6 +859,19 @@ andcmd(struct cmd *left, struct cmd *right)
   cmd->right = right;
   return (struct cmd*)cmd;
 }
+
+struct cmd*
+orcmd(struct cmd *left, struct cmd *right)
+{
+  struct orcmd *cmd;
+
+  cmd = malloc(sizeof(*cmd));
+  memset(cmd, 0, sizeof(*cmd));
+  cmd->type = OR;
+  cmd->left = left;
+  cmd->right = right;
+  return (struct cmd*)cmd;
+}
 //PAGEBREAK!
 // 命令行解析：把输入字符串拆成 token，构造命令树。
 
@@ -553,6 +895,12 @@ gettoken(char **ps, char *es, char **q, char **eq)
   case 0:
     break;
   case '|':
+    s++;
+    if(*s == '|'){
+      ret = 'O';  // "||" 表示逻辑或
+      s++;
+    }
+    break;
   case '(':
   case ')':
   case ';':
@@ -628,10 +976,16 @@ parseline(char **ps, char *es)
   struct cmd *cmd;
 
   cmd = parsepipe(ps, es);
-  while(peek(ps, es, "&")){
+  while(peek(ps, es, "&|")){
     int tok = gettoken(ps, es, 0, 0);
     if(tok == 'A')
       cmd = andcmd(cmd, parseline(ps, es));
+    else if(tok == 'O')
+      cmd = orcmd(cmd, parseline(ps, es));
+    else if(tok == '|'){
+      fprintf(2, "syntax: unmatched |\n");
+      panic("syntax");
+    }
     else
       cmd = backcmd(cmd);
   }
@@ -738,6 +1092,7 @@ nulterminate(struct cmd *cmd)
   struct backcmd *bcmd;
   struct execcmd *ecmd;
   struct listcmd *lcmd;
+  struct orcmd *ocmd;
   struct pipecmd *pcmd;
   struct redircmd *rcmd;
 
@@ -778,6 +1133,12 @@ nulterminate(struct cmd *cmd)
     acmd = (struct andcmd*)cmd;
     nulterminate(acmd->left);
     nulterminate(acmd->right);
+    break;
+
+  case OR:
+    ocmd = (struct orcmd*)cmd;
+    nulterminate(ocmd->left);
+    nulterminate(ocmd->right);
     break;
   }
   return cmd;

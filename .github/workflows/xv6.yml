@@ -38,6 +38,9 @@ jobs:
       - name: Tool tests
         run: ./test-xv6.py tools
 
+      - name: Shell tests
+        run: ./test-xv6.py shell
+
       - name: Grind stress
         run: ./test-xv6.py grind
 
