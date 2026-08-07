@@ -7,6 +7,9 @@ struct file;
 struct inode;
 struct pipe;
 struct proc;
+struct proc_fs;
+struct proc_sig;
+struct proc_vmas;
 struct spinlock;
 struct sleeplock;
 struct stat;
@@ -25,6 +28,8 @@ void            bunpin(struct buf*);
 void            consoleinit(void);
 void            consoleintr(int);
 void            consputc(int);
+int             console_set_fg(int);
+int             console_get_fg(void);
 
 // exec.c
 int             kexec(char*, char**);
@@ -34,14 +39,33 @@ struct file*    filealloc(void);
 void            fileclose(struct file*);
 struct file*    filedup(struct file*);
 void            fileinit(void);
+void            pseudoinit(void);
+struct proc_files* proc_files_alloc(void);
+void            proc_files_share(struct proc_files*);
+void            proc_files_copy(struct proc_files*, struct proc_files*);
+void            proc_files_release(struct proc_files*);
+void            proc_files_close_cloexec(struct proc_files*);
+struct proc_fs* proc_fs_alloc(void);
+void            proc_fs_share(struct proc_fs*);
+void            proc_fs_copy(struct proc_fs*, struct proc_fs*);
+void            proc_fs_release(struct proc_fs*);
+struct proc_vmas* proc_vmas_alloc(void);
+void            proc_vmas_share(struct proc_vmas*);
+void            proc_vmas_release(struct proc*);
+struct proc_sig* proc_sig_alloc(void);
+void            proc_sig_share(struct proc_sig*);
+void            proc_sig_copy(struct proc_sig*, struct proc_sig*);
+void            proc_sig_release(struct proc_sig*);
 int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
 int             filewrite(struct file*, uint64, int n);
+int             filefsync(struct file*);
 
 // fs.c
 void            fsinit(int);
 int             dirlink(struct inode*, char*, uint);
 struct inode*   dirlookup(struct inode*, char*, uint*);
+struct inode*   iget(uint, uint);
 struct inode*   ialloc(uint, short);
 struct inode*   idup(struct inode*);
 void            iinit();
@@ -59,6 +83,20 @@ int             writei(struct inode*, int, uint64, uint, uint);
 void            itrunc(struct inode*);
 void            ireclaim(int);
 int             iaccess(struct inode*, int);
+int             fsvalid(int);
+int             kgetcwd(char*, int);
+
+// mount.c
+void            mountinit(void);
+void            mount_acquire(void);
+void            mount_release(void);
+int             mount_enter(struct inode**);
+int             mount_dotdot(struct inode*, struct inode**);
+int             mount_add(int, struct inode*, char*);
+int             mount_remove(char*);
+void            mount_default(void);
+uint64          sys_mount(void);
+uint64          sys_umount(void);
 
 // kalloc.c
 void*           kalloc(void);
@@ -80,6 +118,8 @@ void            fifo_close(struct pipe*, int);
 void            pipeclose(struct pipe*, int);
 int             piperead(struct pipe*, uint64, int);
 int             pipewrite(struct pipe*, uint64, int);
+int             pipe_ready_read(struct pipe*);
+int             pipe_ready_write(struct pipe*);
 
 // printf.c
 int             printf(char*, ...) __attribute__ ((format (printf, 1, 2)));
@@ -93,17 +133,27 @@ int             proccount(void);
 int             ksetpriority(int, int);
 void            mlfq_boost(void);
 int             ksignal(int, uint64);
+int             sig_default_kind(int);
 int             ksigkill(int, int);
 uint64          sys_signal(void);
 uint64          sys_sigkill(void);
 uint64          sys_sigreturn(void);
+uint64          sys_sigprocmask(void);
+uint64          sys_sigaction(void);
+uint64          sys_sigpending(void);
 void            kexit(int);
+void            kexit_group(int);
+void            kexec_thread_cleanup(void);
 int             kfork(void);
+int             kclone(uint64, uint64, uint64, uint64, uint64);
+int             kthread_create(void (*)(void*), void*);
 int             growproc(int);
 void            proc_mapstacks(pagetable_t);
 pagetable_t     proc_pagetable(struct proc *);
 void            proc_freepagetable(pagetable_t, uint64);
 int             kkill(int);
+int             ktgkill(int, int, int);
+int             kkillpg(int, int);
 int             killed(struct proc*);
 void            setkilled(struct proc*);
 struct cpu*     mycpu(void);
@@ -114,6 +164,8 @@ void            sched(void);
 void            sleep(void*, struct spinlock*);
 void            userinit(void);
 int             kwait(uint64);
+int             kwaitpid(int, uint64);
+int             kwaitpid_flags(int, uint64, int);
 void            wakeup(void*);
 void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
@@ -179,6 +231,33 @@ int             cow_add(uint64);
 void            cow_release(uint64);
 int             cow_handle(pagetable_t, uint64);
 int             cow_selftest(void);
+
+// swap.c
+void            swapinit(void);
+int             swap_write(uint64, int);
+int             swap_read(uint64, int);
+void            swap_free(int);
+uint64          swap_flags(int);
+int             swap_evict(void);
+int             swap_evict_any(void);
+uint64          sys_swapout(void);
+uint64          sys_swapinfo(void);
+
+// futex.c
+void            futexinit(void);
+uint64          sys_futex_wait(void);
+uint64          sys_futex_wake(void);
+uint64          sys_futex_wait_timeout(void);
+uint64          sys_futex_set_owner(void);
+uint64          sys_futex_clear_owner(void);
+void            futex_owner_exited(int);
+
+// sem.c
+void            seminit(void);
+uint64          sys_semget(void);
+uint64          sys_semop(void);
+uint64          sys_semctl(void);
+
 void            module_notify_tick(void);
 void            module_notify_syscall_enter(int);
 void            module_notify_syscall_exit(int, uint64);
@@ -210,6 +289,7 @@ pagetable_t     uvmcreate(void);
 uint64          uvmalloc(pagetable_t, uint64, uint64, int);
 uint64          uvmdealloc(pagetable_t, uint64, uint64);
 int             uvmcopy(pagetable_t, pagetable_t, uint64);
+int             uvmshare(pagetable_t, pagetable_t, uint64);
 void            uvmfree(pagetable_t, uint64);
 void            uvmunmap(pagetable_t, uint64, uint64, int);
 void            uvmclear(pagetable_t, uint64);
@@ -224,7 +304,9 @@ uint64          vmfault(pagetable_t, uint64, int);
 // vma.c
 uint64          vma_alloc(struct proc*, uint64);
 int             vma_add(struct proc*, uint64, uint64, int, int, struct inode*, uint);
+uint64          vma_mmap(struct proc*, uint64, int, int, struct inode*, uint);
 int             vma_remove(struct proc*, uint64, uint64);
+int             vma_mprotect(struct proc*, uint64, uint64, int);
 void            vma_clear(struct proc*);
 int             vma_copy(struct proc*, struct proc*);
 uint64          vma_fault(struct proc*, uint64);

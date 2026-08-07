@@ -20,6 +20,10 @@ struct kmod_api {
   int (*proccount)(void);
   kmod_u64 (*freemem)(void);
   kmod_u64 ticks;
+  kmod_u64 (*lookup_symbol)(const char *name);
+  int (*module_require)(int id);
+  int (*module_release)(int id);
+  int (*param_register)(const char *name, void *ptr);
 };
 
 #endif

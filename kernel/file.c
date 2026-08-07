@@ -31,6 +31,157 @@ fileinit(void)
   initlock(&ftable.lock, "ftable");
 }
 
+struct proc_files*
+proc_files_alloc(void)
+{
+  struct proc_files *pf = kalloc();
+
+  if(pf == 0)
+    return 0;
+  memset(pf, 0, PGSIZE);
+  initlock(&pf->lock, "proc_files");
+  pf->ref = 1;
+  return pf;
+}
+
+void
+proc_files_share(struct proc_files *pf)
+{
+  acquire(&pf->lock);
+  pf->ref++;
+  release(&pf->lock);
+}
+
+// fork 时复制文件描述符表：底层 file 对象共享，但表本身独立。
+void
+proc_files_copy(struct proc_files *dst, struct proc_files *src)
+{
+  acquire(&src->lock);
+  for(int i = 0; i < NOFILE; i++){
+    if(src->ofile[i])
+      dst->ofile[i] = filedup(src->ofile[i]);
+    dst->cloexec[i] = src->cloexec[i];
+  }
+  release(&src->lock);
+}
+
+// exec 成功提交前关闭所有 O_CLOEXEC 描述符。
+void
+proc_files_close_cloexec(struct proc_files *pf)
+{
+  if(pf == 0)
+    return;
+  acquire(&pf->lock);
+  for(int i = 0; i < NOFILE; i++){
+    if(pf->cloexec[i] && pf->ofile[i]){
+      struct file *f = pf->ofile[i];
+      pf->ofile[i] = 0;
+      pf->cloexec[i] = 0;
+      release(&pf->lock);
+      fileclose(f);
+      acquire(&pf->lock);
+    }
+  }
+  release(&pf->lock);
+}
+
+// 释放一个文件描述符表引用；最后一个引用关闭所有 fd。
+void
+proc_files_release(struct proc_files *pf)
+{
+  int last = 0;
+
+  if(pf == 0)
+    return;
+  acquire(&pf->lock);
+  if(--pf->ref == 0)
+    last = 1;
+  release(&pf->lock);
+  if(!last)
+    return;
+
+  for(int i = 0; i < NOFILE; i++){
+    if(pf->ofile[i])
+      fileclose(pf->ofile[i]);
+  }
+  kfree(pf);
+}
+
+struct proc_fs*
+proc_fs_alloc(void)
+{
+  struct proc_fs *pfs = kalloc();
+
+  if(pfs == 0)
+    return 0;
+  memset(pfs, 0, PGSIZE);
+  initlock(&pfs->lock, "proc_fs");
+  pfs->ref = 1;
+  return pfs;
+}
+
+void
+proc_fs_share(struct proc_fs *pfs)
+{
+  acquire(&pfs->lock);
+  pfs->ref++;
+  release(&pfs->lock);
+}
+
+// fork 时复制 cwd；inode 引用单独持有。
+void
+proc_fs_copy(struct proc_fs *dst, struct proc_fs *src)
+{
+  acquire(&src->lock);
+  dst->root = idup(src->root);
+  dst->cwd = idup(src->cwd);
+  release(&src->lock);
+}
+
+// 释放一个文件系统上下文引用；最后一个引用释放 cwd。
+void
+proc_fs_release(struct proc_fs *pfs)
+{
+  int last = 0;
+
+  if(pfs == 0)
+    return;
+  acquire(&pfs->lock);
+  if(--pfs->ref == 0)
+    last = 1;
+  release(&pfs->lock);
+  if(!last)
+    return;
+
+  if(pfs->root){
+    begin_op();
+    iput(pfs->root);
+    end_op();
+  }
+  if(pfs->cwd){
+    begin_op();
+    iput(pfs->cwd);
+    end_op();
+  }
+  kfree(pfs);
+}
+
+// 强制把 inode 元数据写回磁盘，供 fsync 使用。
+int
+filefsync(struct file *f)
+{
+  if(f == 0 || (f->type != FD_INODE && f->type != FD_DEVICE &&
+                f->type != FD_FIFO))
+    return 0;
+
+  begin_op();
+  ilock(f->ip);
+  iupdate(f->ip);
+  iunlock(f->ip);
+  end_op();
+  return 0;
+}
+
 // 从全局文件表分配一个 struct file，并把引用计数置为 1。
 struct file*
 filealloc(void)
@@ -125,6 +276,8 @@ fileread(struct file *f, uint64 addr, int n)
     return -1;
 
   if(f->type == FD_PIPE || f->type == FD_FIFO){
+    if(f->nonblock && !pipe_ready_read(f->pipe))
+      return 0;
     r = piperead(f->pipe, addr, n);
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].read)
@@ -152,6 +305,8 @@ filewrite(struct file *f, uint64 addr, int n)
     return -1;
 
   if(f->type == FD_PIPE || f->type == FD_FIFO){
+    if(f->nonblock && !pipe_ready_write(f->pipe))
+      return -1;
     ret = pipewrite(f->pipe, addr, n);
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].write)

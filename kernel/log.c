@@ -118,7 +118,7 @@ begin_op(void)
     if(trans.committing){
       wait = 1;
     } else {
-      for(int d = ROOTDEV; d < ROOTDEV + NDISK; d++){
+      for(int d = ROOTDEV; d < ROOTDEV + NDISK - 1; d++){
         acquire(&logs[d].lock);
         if(logs[d].lh.n + (trans.outstanding + 1) * MAXOPBLOCKS > LOGBLOCKS)
           wait = 1;
@@ -154,7 +154,7 @@ end_op(void)
   release(&trans.lock);
 
   if(do_commit){
-    for(int d = ROOTDEV; d < ROOTDEV + NDISK; d++){
+    for(int d = ROOTDEV; d < ROOTDEV + NDISK - 1; d++){
       if(logs[d].lh.n > 0)
         commit(&logs[d]);
     }

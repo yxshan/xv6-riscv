@@ -215,6 +215,9 @@ procinfo_full(char *s)
 
 static int in_handler;
 static int bad_reenter;
+static int masked_delivered;
+static int clone_sig_count;
+static int clone_sig_seen;
 
 static void
 reenter_handler(int sig)
@@ -290,6 +293,186 @@ signal_default(char *s)
   exit(0);
 }
 
+static void
+mask_handler(int sig)
+{
+  masked_delivered++;
+  sigreturn();
+}
+
+// sigprocmask：阻塞期间信号保持待处理，解除阻塞后在下一次返回用户态时投递。
+void
+sig_mask(char *s)
+{
+  uint64 set = 1UL << SIGUSR1;
+  uint64 old;
+
+  masked_delivered = 0;
+  if(signal(SIGUSR1, (uint64)mask_handler) < 0){
+    printf("%s: signal failed\n", s);
+    exit(1);
+  }
+  if(sigprocmask(SIG_BLOCK, &set, 0) < 0){
+    printf("%s: sigprocmask block failed\n", s);
+    exit(1);
+  }
+  if(sigkill(getpid(), SIGUSR1) < 0){
+    printf("%s: sigkill failed\n", s);
+    exit(1);
+  }
+  pause(5);
+  if(masked_delivered != 0){
+    printf("%s: blocked signal delivered early\n", s);
+    exit(1);
+  }
+  if(sigprocmask(SIG_UNBLOCK, &set, &old) < 0){
+    printf("%s: sigprocmask unblock failed\n", s);
+    exit(1);
+  }
+  if(masked_delivered != 1){
+    printf("%s: unblocked signal not delivered\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+static void
+clone_sig_handler(int sig)
+{
+  clone_sig_count++;
+  clone_sig_seen = 1;
+  sigreturn();
+}
+
+static void
+clone_sig_worker(void *arg)
+{
+  while(!clone_sig_seen)
+    pause(1);
+}
+
+// SIGSTOP / SIGCONT：子进程停止后 waitpid 返回停止状态，继续后可正常退出。
+void
+sig_stop_cont(char *s)
+{
+  int *shared = (int*)mmap(0, PGSIZE, PROT_READ|PROT_WRITE,
+                           MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+  int pid, st;
+
+  if(shared == (int*)MAP_FAILED){
+    printf("%s: mmap failed\n", s);
+    exit(1);
+  }
+  shared[0] = 0;
+  shared[1] = 0;
+  shared[2] = 0;
+  pid = fork();
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    if(setpgid(0, 0) < 0)
+      exit(1);
+    shared[1] = 1;
+    while(shared[2] == 0)
+      pause(1);
+    pause(20);
+    exit(0);
+  }
+  if(setpgid(pid, pid) < 0){
+    kill(pid);
+    wait(&st);
+    printf("%s: setpgid failed\n", s);
+    exit(1);
+  }
+  for(int i = 0; i < 100 && shared[1] == 0; i++)
+    pause(1);
+  if(shared[1] == 0){
+    printf("%s: child not ready\n", s);
+    exit(1);
+  }
+  if(killpg(pid, SIGSTOP) < 0){
+    printf("%s: SIGSTOP failed\n", s);
+    exit(1);
+  }
+  if(waitpid_flags(pid, &st, WUNTRACED) != pid || !XV6_WIFSTOPPED(st)){
+    printf("%s: waitpid did not report stopped\n", s);
+    exit(1);
+  }
+  pause(5);
+  shared[2] = 1;
+  if(killpg(pid, SIGCONT) < 0){
+    printf("%s: SIGCONT failed\n", s);
+    exit(1);
+  }
+  if(waitpid_flags(pid, &st, WCONTINUED) != pid ||
+     !XV6_WIFCONTINUED(st)){
+    printf("%s: waitpid did not report continued\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, &st) != pid){
+    printf("%s: waitpid after cont failed\n", s);
+    exit(1);
+  }
+  if(munmap((char*)shared, PGSIZE) < 0){
+    printf("%s: munmap failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// 终端前台进程组：设置后可通过 tcgetpgrp 读回。
+void
+tc_pgid(char *s)
+{
+  int pgid = getpgid(0);
+
+  if(pgid <= 0 || tcsetpgrp(0, pgid) < 0 || tcgetpgrp(0) != pgid){
+    printf("%s: terminal foreground pgid failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// clone 线程共享信号处理表：tgkill 精确投递后子线程执行处理器。
+void
+clone_signal(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  clone_sig_count = 0;
+  clone_sig_seen = 0;
+  if(signal(SIGUSR1, (uint64)clone_sig_handler) < 0){
+    printf("%s: signal failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(clone_sig_worker, 0, stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(tgkill(getpid(), pid, SIGUSR1) < 0){
+    printf("%s: tgkill failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, 0) != pid){
+    printf("%s: clone_signal wait failed\n", s);
+    exit(1);
+  }
+  if(clone_sig_count != 1){
+    printf("%s: clone signal handler count %d\n", s, clone_sig_count);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
 // 动态模块应能在加载时注册卸载回调，并在 module_unload 时执行。
 void
 dynmod_lifecycle(char *s)
@@ -327,6 +510,13 @@ dynmod_lifecycle(char *s)
   }
   if(module_load((uint64)buf, st.size) != 0){
     printf("%s: module_load failed\n", s);
+    free(buf);
+    exit(1);
+  }
+  if(module_call(KMOD_DYN_SAMPLE, 3, 0, 0) != 7 ||
+     module_call(KMOD_DYN_SAMPLE, 4, 42, 0) != 42 ||
+     module_call(KMOD_DYN_SAMPLE, 3, 0, 0) != 42){
+    printf("%s: module param failed\n", s);
     free(buf);
     exit(1);
   }
@@ -387,11 +577,16 @@ dynmod_multi(char *s)
 
   if(module_call(KMOD_DYN_SAMPLE, 1, 0, 0) != 0x1234 ||
      module_call(KMOD_DYN_TWO, 1, 0, 0) != 0xABCD ||
-     module_call(KMOD_DYN_TWO, 2, 0, 0) != (uint64)'d'){
+     module_call(KMOD_DYN_TWO, 2, 0, 0) != (uint64)'d' ||
+     module_call(KMOD_DYN_TWO, 3, 0, 0) == 0){
     printf("%s: multi module call failed\n", s);
     exit(1);
   }
-  if(module_unload(0) != 0 || module_unload(1) != 0){
+  if(module_unload(0) != -1){
+    printf("%s: dependency did not block unload\n", s);
+    exit(1);
+  }
+  if(module_unload(1) != 0 || module_unload(0) != 0){
     printf("%s: multi module unload failed\n", s);
     exit(1);
   }
@@ -435,6 +630,29 @@ dynmod_badelf(char *s)
   exit(0);
 }
 
+// 内核线程：通过 selftest 模块创建，用户态 wait 回收并检查执行计数。
+void
+kernel_kthread(char *s)
+{
+  uint64 pid;
+  int status;
+
+  pid = module_call(KMOD_SELFTEST, SELFTEST_CMD_KTHREAD, 0, 0);
+  if(pid == (uint64)-1){
+    printf("%s: kthread create failed\n", s);
+    exit(1);
+  }
+  if(wait(&status) != (int)pid || status != 0){
+    printf("%s: kthread wait failed\n", s);
+    exit(1);
+  }
+  if(module_call(KMOD_SELFTEST, SELFTEST_CMD_KTHREAD_COUNT, 0, 0) != 1){
+    printf("%s: kthread did not run\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 // 内核自测模块应能验证进程表与内存基本不变量。
 void
 kernel_selftest(char *s)
@@ -465,9 +683,14 @@ struct test module_quicktests[] = {
   {signal_no_reenter, "signal_no_reenter"},
   {signal_ignore, "signal_ignore"},
   {signal_default, "signal_default"},
+  {sig_stop_cont, "sig_stop_cont"},
+  {tc_pgid, "tc_pgid"},
+  {sig_mask, "sig_mask"},
+  {clone_signal, "clone_signal"},
   {dynmod_lifecycle, "dynmod_lifecycle"},
   {dynmod_multi, "dynmod_multi"},
   {dynmod_badelf, "dynmod_badelf"},
+  {kernel_kthread, "kernel_kthread"},
   {kernel_selftest, "kernel_selftest"},
   { 0, 0},
 };

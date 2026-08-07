@@ -32,6 +32,24 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 的 Unix Version 6 的教学重实现。
 - 文件权限与用户/组：`chmod` / `chown` / `setuid` / `setgid` / `umask`
 - 需求分页与 `mmap`：支持 `MAP_PRIVATE` / `MAP_SHARED`、部分 `munmap` 与共享写回
 - 多磁盘支持：第二块 virtio 磁盘以 `/disk1` 挂载，可读可写
+- VFS 挂载表：`mount` / `umount` 支持把第二磁盘挂到任意目录，`/disk1` 为默认挂载点，同一设备同一时刻一个挂载点
+- 双重间接块：单文件上限从 268KB 扩展到约 64MB
+- 交换空间：第三块原始交换盘，内存不足时换出、缺页自动换入，`swapinfo` 查看统计
+- ASLR：`exec` 随机化用户栈起始位置，增强地址空间布局随机性
+- `clone` 轻量线程：共享父进程地址空间，使用独立用户栈、trapframe 与内核栈
+- `futex` 与 `thread_create`：用户态互斥同步、线程入口 stub 与 `gettid`
+- 内核线程：`kthread_create` 复用进程表与 MLFQ 调度器，内核态执行后自动退出
+- 线程组语义：`getpid()` 返回 tgid，`gettid()` 返回 tid，clone 线程共享 tgid
+- clone 共享文件表与 cwd：子线程 close/chdir 对同组线程可见
+- 线程组退出：组长退出或按 tgid kill 时终止并回收同组线程
+- `waitpid`：按 tid 精确等待并回收指定 clone 线程
+- TLS：每个线程独立的 `tp` 指针，`set_tls` / `get_tls`
+- `tgkill`：精确向线程组内指定 tid 发送终止信号
+- 线程组信号：clone 线程共享信号处理表，`tgkill` 精确投递，`sigprocmask` 支持信号阻塞
+- clone 共享 VMA 表：`mmap` / `munmap` 与需求分页页面对同组线程可见
+- 进程组：`setpgid` / `getpgid` / `killpg`，支持按进程组投递信号
+- `SIGSTOP` / `SIGCONT`：进程停止/继续，`waitpid_flags` 支持 `WUNTRACED` / `WCONTINUED`
+- shell 作业控制：`jobs` / `fg` / `bg`，`Ctrl-Z` 停止前台进程组、`Ctrl-C` 中断
 
 ## 目录结构
 
@@ -133,6 +151,12 @@ hello
 $ id
 uid=0 gid=0 euid=0 egid=0
 
+$ swapinfo
+swap total 2048 free 2048 swapouts 0 swapins 0
+
+$ aslr
+aslr stack 3ffffff8e0
+
 $ echo hi > permfile
 $ chmod 600 permfile
 $ chown 1 1 permfile
@@ -150,6 +174,17 @@ $ echo disk1 > /disk1/newfile
 $ cat /disk1/newfile
 disk1
 $ rm /disk1/newfile
+
+$ mkdir /mnt
+$ mount 2 /mnt
+mount(2, /mnt) = 0
+$ ls /mnt
+.
+..
+README.md
+echo
+$ umount /mnt
+umount(/mnt) = 0
 
 $ crashdump
 === kernel crash dump ===
@@ -230,6 +265,7 @@ KMOD_SYSREG(KMOD_FOO, foo, foo_handler);
 - [xv6-riscv-extension-ideas.md](docs/xv6-riscv-extension-ideas.md)：扩展思路
 - [xv6-riscv-module-architecture.md](docs/xv6-riscv-module-architecture.md)：模块架构
 - [xv6-riscv-module-priorities.md](docs/xv6-riscv-module-priorities.md)：模块方向与优先级
+- [xv6-riscv-kernel-completeness.md](docs/xv6-riscv-kernel-completeness.md)：内核完全体路线
 - [xv6-riscv-module-refinement.md](docs/xv6-riscv-module-refinement.md)：现有模块完善批次
 - [xv6-riscv-testing.md](docs/xv6-riscv-testing.md)：测试架构与指南
 - [AGENTS.md](AGENTS.md)：贡献者指南

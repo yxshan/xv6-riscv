@@ -51,6 +51,47 @@
   X(SYS_setgid, setgid) \
   X(SYS_umask, umask) \
   X(SYS_mmap, mmap) \
-  X(SYS_munmap, munmap)
+  X(SYS_munmap, munmap) \
+  X(SYS_mount, mount) \
+  X(SYS_umount, umount) \
+  X(SYS_swapout, swapout) \
+  X(SYS_swapinfo, swapinfo) \
+  X(SYS_clone, clone) \
+  X(SYS_futex_wait, futex_wait) \
+  X(SYS_futex_wake, futex_wake) \
+  X(SYS_gettid, gettid) \
+  X(SYS_waitpid, waitpid) \
+  X(SYS_waitpid_flags, waitpid_flags) \
+  X(SYS_set_tls, set_tls) \
+  X(SYS_get_tls, get_tls) \
+  X(SYS_tgkill, tgkill) \
+  X(SYS_sigprocmask, sigprocmask) \
+  X(SYS_setpgid, setpgid) \
+  X(SYS_getpgid, getpgid) \
+  X(SYS_killpg, killpg) \
+  X(SYS_tcsetpgrp, tcsetpgrp) \
+  X(SYS_tcgetpgrp, tcgetpgrp) \
+  X(SYS_exit_group, exit_group) \
+  X(SYS_sigaction, sigaction) \
+  X(SYS_sigpending, sigpending) \
+  X(SYS_dup2, dup2) \
+  X(SYS_getcwd, getcwd) \
+  X(SYS_chroot, chroot) \
+  X(SYS_fsync, fsync) \
+  X(SYS_nanosleep, nanosleep) \
+  X(SYS_clock_gettime, clock_gettime) \
+  X(SYS_readv, readv) \
+  X(SYS_writev, writev) \
+  X(SYS_pipe2, pipe2) \
+  X(SYS_poll, poll) \
+  X(SYS_select, select) \
+  X(SYS_mprotect, mprotect) \
+  X(SYS_flock, flock) \
+  X(SYS_semget, semget) \
+  X(SYS_semop, semop) \
+  X(SYS_semctl, semctl) \
+  X(SYS_futex_wait_timeout, futex_wait_timeout) \
+  X(SYS_futex_set_owner, futex_set_owner) \
+  X(SYS_futex_clear_owner, futex_clear_owner)
 
 #endif

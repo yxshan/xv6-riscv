@@ -69,6 +69,8 @@ int
 main(int argc, char *argv[])
 {
   int i, cc, fd;
+  int argi = 1;
+  int make_mountpoint = 0;
   uint rootino, inum, off;
   struct dirent de;
   char buf[BSIZE];
@@ -77,17 +79,21 @@ main(int argc, char *argv[])
 
   static_assert(sizeof(int) == 4, "Integers must be 4 bytes!");
 
-  if(argc < 2){
-    fprintf(stderr, "Usage: mkfs fs.img files...\n");
+  if(argc >= 2 && strcmp(argv[1], "-disk1") == 0){
+    make_mountpoint = 1;
+    argi = 2;
+  }
+  if(argc < argi + 1){
+    fprintf(stderr, "Usage: mkfs [-disk1] fs.img files...\n");
     exit(1);
   }
 
   assert((BSIZE % sizeof(struct dinode)) == 0);
   assert((BSIZE % sizeof(struct dirent)) == 0);
 
-  fsfd = open(argv[1], O_RDWR|O_CREAT|O_TRUNC, 0666);
+  fsfd = open(argv[argi], O_RDWR|O_CREAT|O_TRUNC, 0666);
   if(fsfd < 0)
-    die(argv[1]);
+    die(argv[argi]);
 
   // 1 fs block = 1 disk sector
   nmeta = 2 + nlog + ninodeblocks + nbitmap;
@@ -127,7 +133,30 @@ main(int argc, char *argv[])
   strcpy(de.name, "..");
   iappend(rootino, &de, sizeof(de));
 
-  for(i = 2; i < argc; i++){
+  if(make_mountpoint){
+    // 创建 /disk1 挂载点目录，内核启动后把第二块磁盘挂载到这里。
+    uint disk1ino = ialloc(T_DIR);
+    bzero(&de, sizeof(de));
+    de.inum = xshort(disk1ino);
+    strcpy(de.name, ".");
+    iappend(disk1ino, &de, sizeof(de));
+
+    bzero(&de, sizeof(de));
+    de.inum = xshort(rootino);
+    strcpy(de.name, "..");
+    iappend(disk1ino, &de, sizeof(de));
+
+    bzero(&de, sizeof(de));
+    de.inum = xshort(disk1ino);
+    strcpy(de.name, "disk1");
+    iappend(rootino, &de, sizeof(de));
+
+    rinode(rootino, &din);
+    din.nlink = xshort(xshort(din.nlink) + 1);
+    winode(rootino, &din);
+  }
+
+  for(i = argi + 1; i < argc; i++){
     // get rid of "user/"
     char *shortname;
     if(strncmp(argv[i], "user/", 5) == 0)
@@ -258,10 +287,11 @@ void
 iappend(uint inum, void *xp, int n)
 {
   char *p = (char*)xp;
-  uint fbn, off, n1;
+  uint fbn, fbn0, off, n1;
   struct dinode din;
   char buf[BSIZE];
   uint indirect[NINDIRECT];
+  uint idx1, idx2, x1;
   uint x;
 
   rinode(inum, &din);
@@ -269,26 +299,49 @@ iappend(uint inum, void *xp, int n)
   // printf("append inum %d at off %d sz %d\n", inum, off, n);
   while(n > 0){
     fbn = off / BSIZE;
+    fbn0 = fbn;
     assert(fbn < MAXFILE);
-    if(fbn < NDIRECT){
-      if(xint(din.addrs[fbn]) == 0){
-        din.addrs[fbn] = xint(freeblock++);
+    if(fbn0 < NDIRECT){
+      if(xint(din.addrs[fbn0]) == 0){
+        din.addrs[fbn0] = xint(freeblock++);
       }
-      x = xint(din.addrs[fbn]);
+      x = xint(din.addrs[fbn0]);
     } else {
-      if(xint(din.addrs[NDIRECT]) == 0){
-        din.addrs[NDIRECT] = xint(freeblock++);
+      fbn -= NDIRECT;
+      if(fbn < NINDIRECT){
+        if(xint(din.addrs[NDIRECT]) == 0){
+          din.addrs[NDIRECT] = xint(freeblock++);
+        }
+        rsect(xint(din.addrs[NDIRECT]), (char*)indirect);
+        if(indirect[fbn] == 0){
+          indirect[fbn] = xint(freeblock++);
+          wsect(xint(din.addrs[NDIRECT]), (char*)indirect);
+        }
+        x = xint(indirect[fbn]);
+      } else {
+        fbn -= NINDIRECT;
+        if(xint(din.addrs[NDIRECT+1]) == 0){
+          din.addrs[NDIRECT+1] = xint(freeblock++);
+        }
+        rsect(xint(din.addrs[NDIRECT+1]), (char*)indirect);
+        idx1 = fbn / NINDIRECT;
+        idx2 = fbn % NINDIRECT;
+        if(indirect[idx1] == 0){
+          indirect[idx1] = xint(freeblock++);
+          wsect(xint(din.addrs[NDIRECT+1]), (char*)indirect);
+        }
+        x1 = xint(indirect[idx1]);
+        rsect(x1, (char*)indirect);
+        if(indirect[idx2] == 0){
+          indirect[idx2] = xint(freeblock++);
+          wsect(x1, (char*)indirect);
+        }
+        x = xint(indirect[idx2]);
       }
-      rsect(xint(din.addrs[NDIRECT]), (char*)indirect);
-      if(indirect[fbn - NDIRECT] == 0){
-        indirect[fbn - NDIRECT] = xint(freeblock++);
-        wsect(xint(din.addrs[NDIRECT]), (char*)indirect);
-      }
-      x = xint(indirect[fbn-NDIRECT]);
     }
-    n1 = min(n, (fbn + 1) * BSIZE - off);
+    n1 = min(n, (fbn0 + 1) * BSIZE - off);
     rsect(x, buf);
-    bcopy(p, buf + off - (fbn * BSIZE), n1);
+    bcopy(p, buf + off - (fbn0 * BSIZE), n1);
     wsect(x, buf);
     n -= n1;
     off += n1;

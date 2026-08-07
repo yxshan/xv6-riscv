@@ -8,7 +8,7 @@
 # ./test-xv6.py crash  (runs the crash tests)
 # ./test-xv6.py log (runs the log crash test)
 
-import argparse, os, inspect, re, signal, subprocess, sys, time
+import argparse, os, inspect, re, select, signal, subprocess, sys, time
 import atexit
 import shutil
 from subprocess import run
@@ -21,7 +21,11 @@ args = parser.parse_args()
 _active_qemus = []
 
 def _build_once():
-    run(["make", "kernel/kernel", "fs.img", "fs2.img"], check=True)
+    # 强制重建镜像，避免上次运行遗留的文件污染“干净”缓存。
+    for f in ("fs.img", "fs2.img", "swap.img"):
+        if os.path.exists(f):
+            os.remove(f)
+    run(["make", "kernel/kernel", "fs.img", "fs2.img", "swap.img"], check=True)
     shutil.copyfile("fs.img", "fs.img.clean")
     shutil.copyfile("fs2.img", "fs2.img.clean")
 
@@ -58,14 +62,17 @@ class QEMU(object):
              "-drive", "file=fs.img,if=none,format=raw,id=x0",
              "-device", "virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0",
              "-drive", "file=fs2.img,if=none,format=raw,id=x1",
-             "-device", "virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1"]
+             "-device", "virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1",
+             "-drive", "file=swap.img,if=none,format=raw,id=x2",
+             "-device", "virtio-blk-device,drive=x2,bus=virtio-mmio-bus.2"]
         self.proc = subprocess.Popen(q, stdin=subprocess.PIPE,
                                       stdout=subprocess.PIPE,
                                       stderr=subprocess.STDOUT,
                                       start_new_session=True)
         _active_qemus.append(self)
         self.output = ""
-        self.outbytes = bytearray()       
+        self.outbytes = bytearray()
+        self.offset = 0
         time.sleep(1)
 
     def reset_fs(self):
@@ -108,7 +115,13 @@ class QEMU(object):
             _active_qemus.remove(self)
 
     def read(self):
-        buf = os.read(self.proc.stdout.fileno(), 4096)
+        r, _, _ = select.select([self.proc.stdout], [], [], 5)
+        if not r:
+            return
+        try:
+            buf = os.read(self.proc.stdout.fileno(), 4096)
+        except BlockingIOError:
+            return
         self.outbytes.extend(buf)
         self.output = self.outbytes.decode("utf-8", "replace")
 
@@ -122,12 +135,15 @@ class QEMU(object):
         sys.exit(1)
 
     def match(self, *regexps, exit=True):
-        lines = self.lines()
+        all_lines = self.lines()
+        lines = all_lines[self.offset:]
         last = -1
         for i, line in enumerate(lines):
             if any(re.match(r, line) for r in regexps):
                 print(line)
                 last = i
+        if last >= 0:
+            self.offset += last + 1
         if last == -1 and exit:
             self.error()
         l = ""
@@ -167,7 +183,7 @@ def crash_log():
     q = QEMU(True)
     q.cmd("logstress f0 f1 f2 f3\n")
     q.monitor("^logstress start", timeout=30)
-    time.sleep(8)
+    time.sleep(12)
     q.crash()
     q.stop()
 
@@ -283,13 +299,46 @@ def test_tools():
     q.monitor("^pid .* ps", timeout=60)
     q.cmd("id\n")
     q.monitor("^\\$ uid=0 gid=0 euid=0 egid=0|^uid=0 gid=0 euid=0 egid=0", timeout=60)
+    q.cmd("swapinfo\n")
+    q.monitor("^swap total ", timeout=60)
+    aslr_addrs = []
+    for i in range(5):
+        q.cmd("aslr\n")
+        q.monitor("^aslr stack ", timeout=60)
+        aslr_addrs.append(
+            [line for line in q.lines() if re.match("^aslr stack ", line)][-1])
+    if len(set(aslr_addrs)) < 2:
+        print("FAIL: ASLR stack did not vary across runs")
+        q.stop()
+        sys.exit(1)
     q.cmd("ls /disk1\n")
     q.monitor("^echo ", timeout=60)
     q.cmd("cat /disk1/README.md\n")
     q.monitor(".*# xv6-riscv", timeout=60)
+    q.monitor("^\\$", timeout=30)
     q.cmd("echo WROTE-OK > /disk1/newfile\ncat /disk1/newfile\n")
     q.monitor(".*WROTE-OK", timeout=60)
     q.cmd("rm /disk1/newfile\n")
+    q.cmd("umount /disk1\nmkdir /mnt\nmount 2 /mnt\nls /mnt\n")
+    q.monitor("^echo ", timeout=60)
+    q.cmd("echo MNT-OK > /mnt/mntfile\ncat /mnt/mntfile\n")
+    q.monitor("^\\$ MNT-OK$|^MNT-OK$", timeout=60)
+    q.cmd("umount /mnt\n")
+    q.monitor("^\\$ umount\\(/mnt\\) = 0|^umount\\(/mnt\\) = 0", timeout=60)
+    q.cmd("mount 2 /disk1\n")
+    q.monitor("^\\$ mount\\(2, /disk1\\) = 0|^mount\\(2, /disk1\\) = 0", timeout=60)
+    q.stop()
+    print("OK")
+
+def test_jobs():
+    print("Test shell job control")
+    q = QEMU(True)
+    q.cmd("sleep 100000 &\n")
+    q.monitor("^\\[1\\] .* running", timeout=30)
+    q.cmd("stop %1\n")
+    q.monitor("^\\[1\\] .* stopped", timeout=30)
+    q.cmd("bg %1\n")
+    q.monitor("^\\[1\\] .* running", timeout=30)
     q.stop()
     print("OK")
 
@@ -314,17 +363,23 @@ def test_modules():
     q.monitor("^module_load = 0", timeout=60)
     q.cmd("modcli 3 1\n")
     q.monitor("^module_call\\(3, 1\\) = 4660", timeout=60)
+    q.cmd("modcli 3 4 42\n")
+    q.monitor("^module_call\\(3, 4\\) = 42", timeout=60)
+    q.cmd("modcli 3 3\n")
+    q.monitor("^module_call\\(3, 3\\) = 42", timeout=60)
     q.cmd("modload dynmod2\n")
     q.monitor("^module_load = 1", timeout=60)
     q.cmd("modcli 5 1\n")
     q.monitor("^module_call\\(5, 1\\) = 43981", timeout=60)
     q.cmd("modcli 5 2\n")
     q.monitor("^module_call\\(5, 2\\) = 100", timeout=60)
-    q.cmd("modunload 0\n")
-    q.monitor("^dynmod unloaded", timeout=60)
-    q.monitor("^module_unload = 0", timeout=60)
+    q.cmd("modcli 5 3\n")
+    q.monitor("^module_call\\(5, 3\\) = [1-9]", timeout=60)
     q.cmd("modunload 1\n")
     q.monitor("^dynmod2 unloaded", timeout=60)
+    q.monitor("^module_unload = 0", timeout=60)
+    q.cmd("modunload 0\n")
+    q.monitor("^dynmod unloaded", timeout=60)
     q.monitor("^module_unload = 0", timeout=60)
     q.stop()
     print("OK")

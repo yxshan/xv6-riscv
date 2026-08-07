@@ -42,6 +42,7 @@ kvmmake(void)
   // 映射 virtio 磁盘的 MMIO 控制接口。
   kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
   kvmmap(kpgtbl, VIRTIO1, VIRTIO1, PGSIZE, PTE_R | PTE_W);
+  kvmmap(kpgtbl, VIRTIO2, VIRTIO2, PGSIZE, PTE_R | PTE_W);
 
   // 映射中断控制器 PLIC 的寄存器区域。
   kvmmap(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);
@@ -209,6 +210,13 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0) // leaf page table entry allocated?
       continue;   
+    if(IS_SWAP(*pte)){
+      // 换出页没有物理页，只需要归还交换槽。
+      if(do_free)
+        swap_free(SWAP_SLOT(*pte));
+      *pte = 0;
+      continue;
+    }
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
       continue;
     if(do_free){
@@ -316,15 +324,36 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       continue;   // 该页表项尚未分配，跳过
-    if((*pte & PTE_V) == 0)
-      continue;   // 物理页尚未分配，跳过
+    if((*pte & PTE_V) == 0 && !IS_SWAP(*pte))
+      continue;   // 既没有物理页也没有交换槽，跳过
+    if(IS_SWAP(*pte)){
+      // 父进程页已换出：为子进程读入一份独立物理副本。
+      if((mem = kalloc()) == 0)
+        goto err;
+      if(swap_read((uint64)mem, SWAP_SLOT(*pte)) < 0){
+        kfree(mem);
+        goto err;
+      }
+      flags = swap_flags(SWAP_SLOT(*pte));
+      if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+        kfree(mem);
+        goto err;
+      }
+      continue;
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if(flags & PTE_SHM){
-      // 共享页：子进程直接映射同一物理页，不复制内容。
-      shm_addref_pa(pa);
+      // 共享页：clone/共享 mmap 走 cowref，System V shm 走 seg->ref。
+      if(flags & PTE_COW)
+        cow_add(pa);
+      else
+        shm_addref_pa(pa);
       if(mappages(new, i, PGSIZE, pa, flags) != 0){
-        shm_subref_pa(pa);
+        if(flags & PTE_COW)
+          cow_release(pa);
+        else
+          shm_subref_pa(pa);
         goto err;
       }
       continue;
@@ -383,6 +412,86 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+
+// 为 clone 线程复制地址空间：新页表映射与父进程相同的物理页，
+// 并通过 PTE_SHM + cow 引用计数保证最后一个映射释放时才回收物理页。
+int
+uvmshare(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  pte_t *pte;
+  uint64 pa, i, flags;
+
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0 || (*pte & PTE_V) == 0)
+      continue;
+    pa = PTE2PA(*pte);
+    if(*pte & PTE_SHM){
+      // 保留现有共享映射：共享 mmap 走 cowref，System V shm 走 seg->ref。
+      flags = PTE_FLAGS(*pte);
+      if(mappages(new, i, PGSIZE, pa, flags) != 0)
+        goto err;
+      if(flags & PTE_COW)
+        cow_add(pa);
+      else
+        shm_addref_pa(pa);
+      continue;
+    }
+    if(*pte & PTE_COW){
+      if(cow_handle(old, i) < 0)
+        goto err;
+      pte = walk(old, i, 0);
+      if(pte == 0)
+        goto err;
+      pa = PTE2PA(*pte);
+    }
+    // 普通页转为 clone 共享页：PTE_SHM|PTE_COW 作为引用计数标记。
+    flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_SHM | PTE_COW | PTE_W;
+    *pte = PA2PTE(pa) | flags;
+    cow_add(pa);  // 父进程映射引用
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      goto err;
+    }
+    cow_add(pa);  // 子线程映射引用
+  }
+
+  // mmap 与共享内存区域位于堆大小之外，需要单独共享。
+  for(i = MMAP_BASE; i < TRAPFRAME; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0 || (*pte & PTE_V) == 0)
+      continue;
+    pa = PTE2PA(*pte);
+    if(*pte & PTE_SHM){
+      flags = PTE_FLAGS(*pte);
+      if(mappages(new, i, PGSIZE, pa, flags) != 0)
+        goto err;
+      if(flags & PTE_COW)
+        cow_add(pa);
+      else
+        shm_addref_pa(pa);
+      continue;
+    }
+    if(*pte & PTE_COW){
+      if(cow_handle(old, i) < 0)
+        goto err;
+      pte = walk(old, i, 0);
+      if(pte == 0)
+        goto err;
+      pa = PTE2PA(*pte);
+    }
+    flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_SHM | PTE_COW | PTE_W;
+    *pte = PA2PTE(pa) | flags;
+    cow_add(pa);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      goto err;
+    }
+    cow_add(pa);
+  }
+  return 0;
+
+err:
+  uvmunmap(new, 0, PGROUNDUP(sz) / PGSIZE, 1);
+  uvmunmap(new, MMAP_BASE, (TRAPFRAME - MMAP_BASE) / PGSIZE, 1);
   return -1;
 }
 
@@ -522,10 +631,38 @@ uint64
 vmfault(pagetable_t pagetable, uint64 va, int read)
 {
   uint64 mem, pa;
+  pte_t *pte;
   struct proc *p = myproc();
 
   (void)read;
   va = PGROUNDDOWN(va);
+  if(va >= MAXVA)
+    return 0;
+
+  // 换出页：从交换盘读回并恢复原来的用户权限。
+  pte = walk(pagetable, va, 0);
+  if(pte && IS_SWAP(*pte)){
+    int slot = SWAP_SLOT(*pte);
+    uint64 flags = swap_flags(slot);
+
+    mem = (uint64)kalloc();
+    if(mem == 0 && swap_evict() == 0)
+      mem = (uint64)kalloc();
+    if(mem == 0 && swap_evict_any() == 0)
+      mem = (uint64)kalloc();
+    if(mem == 0)
+      return 0;
+    if(swap_read(mem, slot) < 0){
+      kfree((void*)mem);
+      return 0;
+    }
+    if(mappages(p->pagetable, va, PGSIZE, mem, flags) != 0){
+      kfree((void*)mem);
+      return 0;
+    }
+    swap_free(slot);
+    return mem;
+  }
 
   // mmap 映射优先按 VMA 缺页，从文件读取或补零页。
   if((pa = vma_fault(p, va)) != 0)
@@ -537,6 +674,10 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
     return 0;
   }
   mem = (uint64) kalloc();
+  if(mem == 0 && swap_evict() == 0)
+    mem = (uint64) kalloc();
+  if(mem == 0 && swap_evict_any() == 0)
+    mem = (uint64) kalloc();
   if(mem == 0)
     return 0;
   memset((void *) mem, 0, PGSIZE);
@@ -558,5 +699,7 @@ ismapped(pagetable_t pagetable, uint64 va)
   if (*pte & PTE_V){
     return 1;
   }
+  if(IS_SWAP(*pte))
+    return 1;
   return 0;
 }

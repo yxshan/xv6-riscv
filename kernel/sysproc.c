@@ -10,6 +10,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "time.h"
 
 uint64
 sys_exit(void)
@@ -22,10 +23,42 @@ sys_exit(void)
 }
 
 uint64
+sys_exit_group(void)
+{
+  int n;
+
+  argint(0, &n);
+  kexit_group(n);
+  return 0;  // not reached
+}
+
+uint64
 sys_getpid(void)
 {
-  // 直接从当前进程控制块读取 pid。
+  // getpid 返回线程组 ID；普通进程等于 pid。
+  return myproc()->tgid;
+}
+
+uint64
+sys_gettid(void)
+{
   return myproc()->pid;
+}
+
+uint64
+sys_set_tls(void)
+{
+  uint64 tls;
+
+  argaddr(0, &tls);
+  myproc()->trapframe->tp = tls;
+  return 0;
+}
+
+uint64
+sys_get_tls(void)
+{
+  return myproc()->trapframe->tp;
 }
 
 uint64
@@ -111,12 +144,48 @@ sys_fork(void)
 }
 
 uint64
+sys_clone(void)
+{
+  uint64 flags, fn, arg, stack, stub;
+
+  argaddr(0, &flags);
+  argaddr(1, &fn);
+  argaddr(2, &arg);
+  argaddr(3, &stack);
+  argaddr(4, &stub);
+  return kclone(flags, fn, arg, stack, stub);
+}
+
+uint64
 sys_wait(void)
 {
   uint64 p;
   // 参数是用户提供的 int*，用于接收子进程退出状态。
   argaddr(0, &p);
   return kwait(p);
+}
+
+uint64
+sys_waitpid(void)
+{
+  int pid;
+  uint64 p;
+
+  argint(0, &pid);
+  argaddr(1, &p);
+  return kwaitpid(pid, p);
+}
+
+uint64
+sys_waitpid_flags(void)
+{
+  int pid, options;
+  uint64 p;
+
+  argint(0, &pid);
+  argaddr(1, &p);
+  argint(2, &options);
+  return kwaitpid_flags(pid, p, options);
 }
 
 uint64
@@ -167,8 +236,75 @@ sys_pause(void)
       return -1;
     }
     sleep(&ticks, &tickslock);
+    if(myproc()->stop_pending){
+      release(&tickslock);
+      return -1;
+    }
   }
   release(&tickslock);
+  return 0;
+}
+
+uint64
+sys_nanosleep(void)
+{
+  struct proc *p = myproc();
+  struct timespec req;
+  uint64 reqaddr, remaddr;
+  uint64 tick_ns = 1000000000UL / TICKS_PER_SEC;
+  uint64 ns, need, ticks0;
+
+  argaddr(0, &reqaddr);
+  argaddr(1, &remaddr);
+  if(reqaddr == 0 ||
+     copyin(p->pagetable, (char*)&req, reqaddr, sizeof(req)) < 0)
+    return -1;
+  if(req.tv_sec < 0 || req.tv_nsec < 0 || req.tv_nsec >= 1000000000L)
+    return -1;
+
+  ns = (uint64)req.tv_sec * 1000000000UL + (uint64)req.tv_nsec;
+  need = (ns + tick_ns - 1) / tick_ns;
+  if(need == 0)
+    need = 1;
+
+  acquire(&tickslock);
+  ticks0 = ticks;
+  while(ticks - ticks0 < need){
+    if(killed(p)){
+      release(&tickslock);
+      return -1;
+    }
+    if(p->stop_pending){
+      release(&tickslock);
+      return -1;
+    }
+    sleep(&ticks, &tickslock);
+  }
+  release(&tickslock);
+  return 0;
+}
+
+uint64
+sys_clock_gettime(void)
+{
+  struct proc *p = myproc();
+  struct timespec ts;
+  uint64 tp;
+  int clockid;
+  uint t;
+
+  argint(0, &clockid);
+  argaddr(1, &tp);
+  if(clockid != CLOCK_REALTIME && clockid != CLOCK_MONOTONIC)
+    return -1;
+
+  acquire(&tickslock);
+  t = ticks;
+  release(&tickslock);
+  ts.tv_sec = t / TICKS_PER_SEC;
+  ts.tv_nsec = (t % TICKS_PER_SEC) * (1000000000L / TICKS_PER_SEC);
+  if(copyout(p->pagetable, tp, (char*)&ts, sizeof(ts)) < 0)
+    return -1;
   return 0;
 }
 
@@ -190,6 +326,17 @@ sys_kill(void)
   // kill 只设置目标进程的 killed 标志，实际退出延迟到返回用户态时。
   argint(0, &pid);
   return kkill(pid);
+}
+
+uint64
+sys_tgkill(void)
+{
+  int tgid, tid, sig;
+
+  argint(0, &tgid);
+  argint(1, &tid);
+  argint(2, &sig);
+  return ktgkill(tgid, tid, sig);
 }
 
 // 返回系统启动以来的时钟节拍数。

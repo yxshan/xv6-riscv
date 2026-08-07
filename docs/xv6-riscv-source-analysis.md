@@ -768,9 +768,9 @@ struct dinode {
     short major, minor;      // 设备号
     short nlink;             // 硬链接数
     uint size;               // 文件大小 (字节)
-    uint addrs[NDIRECT+1];   // 12 直接块 + 1 间接块
+    uint addrs[NDIRECT+2];   // 12 直接块 + 1 一级间接块 + 1 二级间接块
 };
-// 最大文件大小 = (12 + 1024/4) * 1024 = 268KB
+// 最大文件大小 = (12 + 256 + 256*256) * 1024 ≈ 64MB
 ```
 
 ### 10.2 文件系统分层架构
@@ -1313,7 +1313,7 @@ scheduler() 循环          scheduler() 循环          scheduler() 循环
 | `BSIZE` | 1024 | fs.h | 文件系统块大小 |
 | `NDIRECT` | 12 | fs.h | 直接块数 |
 | `NINDIRECT` | 256 | fs.h | 间接块数 (BSIZE/4) |
-| `MAXFILE` | 268 | fs.h | 最大文件块数 |
+| `MAXFILE` | 65580 | fs.h | 最大文件块数（含二级间接块） |
 | `DIRSIZ` | 14 | fs.h | 目录项名最大长度 |
 | `PIPESIZE` | 512 | param.h | 管道缓冲区大小 |
 | `USERSTACK` | 1 | memlayout.h | 用户栈页数 |

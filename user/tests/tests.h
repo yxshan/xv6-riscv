@@ -38,5 +38,19 @@ extern struct test perm_quicktests[];
 extern struct test perm_slowtests[];
 extern struct test mmap_quicktests[];
 extern struct test mmap_slowtests[];
+extern struct test thread_quicktests[];
+extern struct test thread_slowtests[];
+extern struct test signal_quicktests[];
+extern struct test signal_slowtests[];
+extern struct test k5_quicktests[];
+extern struct test k5_slowtests[];
+extern struct test k6_quicktests[];
+extern struct test k6_slowtests[];
+extern struct test k7_quicktests[];
+extern struct test k7_slowtests[];
+extern struct test k8_quicktests[];
+extern struct test k8_slowtests[];
+extern struct test boundary_quicktests[];
+extern struct test boundary_slowtests[];
 
 #endif

@@ -58,6 +58,14 @@ SECTIONS
     . = ALIGN(16);
   }
 
+  .ksyms : {
+    . = ALIGN(16);
+    __ksyms_start = .;
+    KEEP(*(.ksyms))
+    __ksyms_end = .;
+    . = ALIGN(16);
+  }
+
   .bss : {
     . = ALIGN(16);
     *(.sbss .sbss.*) /* do not need to distinguish this from .bss */

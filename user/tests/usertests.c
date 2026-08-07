@@ -6,6 +6,8 @@
 
 char buf[BUFSZ];
 
+#define TEST_TIMEOUT_TICKS 300
+
 struct testsuite {
   struct test *quick;
   struct test *slow;
@@ -19,6 +21,13 @@ static struct testsuite suites[] = {
   { module_quicktests, module_slowtests },
   { perm_quicktests, perm_slowtests },
   { mmap_quicktests, mmap_slowtests },
+  { thread_quicktests, thread_slowtests },
+  { signal_quicktests, signal_slowtests },
+  { k5_quicktests, k5_slowtests },
+  { k6_quicktests, k6_slowtests },
+  { k7_quicktests, k7_slowtests },
+  { k8_quicktests, k8_slowtests },
+  { boundary_quicktests, boundary_slowtests },
 };
 
 // run each test in its own process. run returns 1 if child's exit()
@@ -28,6 +37,7 @@ run(void f(char *), char *s)
 {
   int pid;
   int xstatus;
+  int r;
 
   printf("test %s: ", s);
   if((pid = fork()) < 0) {
@@ -38,7 +48,20 @@ run(void f(char *), char *s)
     f(s);
     exit(0);
   } else {
-    wait(&xstatus);
+    for(int i = 0; i < TEST_TIMEOUT_TICKS; i++){
+      r = waitpid_flags(pid, &xstatus, WNOHANG);
+      if(r == pid)
+        break;
+      if(r != -1)
+        break;
+      pause(1);
+    }
+    if(r != pid){
+      kill(pid);
+      waitpid(pid, &xstatus);
+      printf("TIMEOUT\n");
+      return 0;
+    }
     if(xstatus != 0)
       printf("FAILED\n");
     else

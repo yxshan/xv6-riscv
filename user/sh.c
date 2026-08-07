@@ -9,6 +9,8 @@
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
+#include "kernel/signal.h"
+#include "kernel/stat.h"
 
 // 命令树节点类型。
 #define EXEC  1
@@ -61,6 +63,19 @@ struct andcmd {
   struct cmd *left;
   struct cmd *right;
 };
+
+#define MAXJOBS 16
+#define JOB_RUNNING 0
+#define JOB_STOPPED 1
+
+struct job {
+  int used;
+  int pid;
+  int state;
+  char cmd[100];
+};
+
+static struct job jobs[MAXJOBS];
 
 int fork1(void);  // Fork but panics on failure.
 void panic(char*);
@@ -175,6 +190,94 @@ getcmd(char *buf, int nbuf)
   return 0;
 }
 
+static struct job*
+addjob(int pid, int state, char *cmd)
+{
+  for(int i = 0; i < MAXJOBS; i++){
+    if(jobs[i].used)
+      continue;
+    jobs[i].used = 1;
+    jobs[i].pid = pid;
+    jobs[i].state = state;
+    int n = 0;
+    while(cmd[n] && n < sizeof(jobs[i].cmd) - 1){
+      jobs[i].cmd[n] = cmd[n];
+      n++;
+    }
+    jobs[i].cmd[n] = 0;
+    return &jobs[i];
+  }
+  return 0;
+}
+
+static void
+removejob(struct job *j)
+{
+  if(j)
+    j->used = 0;
+}
+
+static struct job*
+findjob(int n)
+{
+  if(n <= 0 || n > MAXJOBS || !jobs[n - 1].used)
+    return 0;
+  return &jobs[n - 1];
+}
+
+static void
+listjobs(void)
+{
+  for(int i = 0; i < MAXJOBS; i++){
+    if(!jobs[i].used)
+      continue;
+    printf("[%d] %d %s %s", i + 1, jobs[i].pid,
+           jobs[i].state == JOB_STOPPED ? "stopped" : "running",
+           jobs[i].cmd);
+  }
+}
+
+static void
+reap_jobs(void)
+{
+  for(int i = 0; i < MAXJOBS; i++){
+    struct job *j = &jobs[i];
+    int st;
+
+    if(!j->used)
+      continue;
+    int r = waitpid_flags(j->pid, &st, WNOHANG);
+    if(r == j->pid){
+      if(XV6_WIFSTOPPED(st))
+        j->state = JOB_STOPPED;
+      else if(XV6_WIFCONTINUED(st))
+        j->state = JOB_RUNNING;
+      else
+        removejob(j);
+    }
+  }
+}
+
+static int
+jobnum(char *s)
+{
+  while(*s == ' ' || *s == '\t')
+    s++;
+  if(*s == '%')
+    s++;
+  return atoi(s);
+}
+
+static int
+startswith(char *s, char *p)
+{
+  while(*p){
+    if(*s++ != *p++)
+      return 0;
+  }
+  return 1;
+}
+
 int
 main(void)
 {
@@ -188,10 +291,13 @@ main(void)
       break;
     }
   }
+  signal(SIGTSTP, SIG_IGN);
+  signal(SIGINT, SIG_IGN);
 
   // 主循环：读一行命令，解析并执行。
   while(getcmd(buf, sizeof(buf)) >= 0){
     char *cmd = buf;
+    reap_jobs();
     while (*cmd == ' ' || *cmd == '\t')
       cmd++;
     if (*cmd == '\n') // is a blank command
@@ -201,11 +307,126 @@ main(void)
       cmd[strlen(cmd)-1] = 0;  // chop \n
       if(chdir(cmd+3) < 0)
         fprintf(2, "cannot cd %s\n", cmd+3);
+    } else if(startswith(cmd, "jobs") &&
+              (cmd[4] == '\n' || cmd[4] == ' ' || cmd[4] == 0)){
+      listjobs();
+    } else if(startswith(cmd, "fg ") || startswith(cmd, "fg%")){
+      struct job *j = findjob(jobnum(cmd + 2));
+      int st;
+      if(j == 0){
+        fprintf(2, "fg: no such job\n");
+        continue;
+      }
+      if(j->state == JOB_STOPPED && killpg(j->pid, SIGCONT) < 0){
+        fprintf(2, "fg: killpg failed\n");
+        continue;
+      }
+      j->state = JOB_RUNNING;
+      tcsetpgrp(0, j->pid);
+      for(;;){
+        int r = waitpid_flags(j->pid, &st, WUNTRACED | WCONTINUED);
+        if(r != j->pid){
+          removejob(j);
+          break;
+        }
+        if(XV6_WIFSTOPPED(st)){
+          j->state = JOB_STOPPED;
+          break;
+        }
+        if(XV6_WIFCONTINUED(st)){
+          j->state = JOB_RUNNING;
+          continue;
+        }
+        removejob(j);
+        break;
+      }
+      tcsetpgrp(0, getpgid(0));
+    } else if(startswith(cmd, "bg ") || startswith(cmd, "bg%")){
+      struct job *j = findjob(jobnum(cmd + 2));
+      if(j == 0){
+        fprintf(2, "bg: no such job\n");
+        continue;
+      }
+      if(j->state == JOB_STOPPED && killpg(j->pid, SIGCONT) < 0){
+        fprintf(2, "bg: killpg failed\n");
+        continue;
+      }
+      j->state = JOB_RUNNING;
+      printf("[%d] %d running %s", (int)(j - jobs) + 1, j->pid, j->cmd);
+    } else if(startswith(cmd, "stop ") || startswith(cmd, "stop%")){
+      struct job *j = findjob(jobnum(cmd + 4));
+      if(j == 0){
+        fprintf(2, "stop: no such job\n");
+        continue;
+      }
+      if(killpg(j->pid, SIGSTOP) < 0){
+        fprintf(2, "stop: killpg failed\n");
+        continue;
+      }
+      j->state = JOB_STOPPED;
+      printf("[%d] %d stopped %s", (int)(j - jobs) + 1, j->pid, j->cmd);
     } else {
-      // 其他命令：fork 子进程运行，父进程等待。
-      if(fork1() == 0)
-        runcmd(parsecmd(cmd));
-      wait(0);
+      char childcmd[100];
+      int n = 0;
+      while(cmd[n] && n < sizeof(childcmd) - 1){
+        childcmd[n] = cmd[n];
+        n++;
+      }
+      childcmd[n] = 0;
+      int bg = 0;
+      for(int i = n - 1; i >= 0; i--){
+        if(childcmd[i] == ' ' || childcmd[i] == '\t' ||
+           childcmd[i] == '\n')
+          continue;
+        if(childcmd[i] == '&' && (i == 0 || childcmd[i - 1] != '&'))
+          bg = 1;
+        break;
+      }
+      if(bg){
+        for(int i = n - 1; i >= 0; i--){
+          if(childcmd[i] == '&' && (i == 0 || childcmd[i - 1] != '&')){
+            childcmd[i] = '\n';
+            break;
+          }
+        }
+      }
+      int pid = fork1();
+      if(pid == 0){
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGINT, SIG_DFL);
+        if(setpgid(0, 0) < 0)
+          fprintf(2, "setpgid failed\n");
+        runcmd(parsecmd(childcmd));
+      }
+      if(setpgid(pid, pid) < 0)
+        fprintf(2, "setpgid failed\n");
+      struct job *j = addjob(pid, JOB_RUNNING, cmd);
+      if(!bg){
+        int st;
+        tcsetpgrp(0, pid);
+        for(;;){
+          int r = waitpid_flags(pid, &st, WUNTRACED | WCONTINUED);
+          if(r != pid){
+            removejob(j);
+            break;
+          }
+          if(XV6_WIFSTOPPED(st)){
+            if(j)
+              j->state = JOB_STOPPED;
+            break;
+          }
+          if(XV6_WIFCONTINUED(st)){
+            if(j)
+              j->state = JOB_RUNNING;
+            continue;
+          }
+          removejob(j);
+          break;
+        }
+        tcsetpgrp(0, getpgid(0));
+      } else if(j){
+        printf("[%d] %d running %s", (int)(j - jobs) + 1, j->pid, j->cmd);
+      }
     }
   }
   exit(0);

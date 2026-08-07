@@ -417,6 +417,506 @@ modunload 0
 modunload 1
 ```
 
+## P3 批次一：VFS 挂载表与双重间接块
+
+状态：已完成
+
+完成内容：
+
+- 新增独立 VFS 挂载层 `kernel/mount.c`，挂载表按设备、挂载点和路径登记。
+- 路径解析经过挂载点时切换到被挂载文件系统的根；挂载根执行 `..` 会跨回父文件系统。
+- 新增 `mount` / `umount` 系统调用、用户库桩和命令行工具。
+- `mkfs` 只在根镜像创建 `/disk1` 目录，内核启动时把第二磁盘默认挂载到该目录。
+- 卸载按挂载路径精确匹配；同一设备同一时刻只允许一个挂载点，避免共享根 inode 的 `..` 语义歧义。
+- 磁盘 inode 增加二级间接块地址，单文件上限从 268KB 扩展到约 64MB。
+- `bmap`、`itrunc` 和 `mkfs` 同步支持二级间接块分配与释放。
+- 新增 `mount_basic`、`mount_dotdot`、`dindirect` 回归测试。
+- `test-xv6.py` 增加挂载工具测试，并修复旧输出重复匹配与镜像缓存污染问题。
+
+涉及文件：
+
+- `kernel/mount.c`、`kernel/defs.h`
+- `kernel/fs.c`、`kernel/fs.h`、`kernel/file.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/main.c`、`kernel/proc.c`
+- `mkfs/mkfs.c`、`Makefile`
+- `user/mount.c`、`user/umount.c`、`user/user.h`、`user/usys.pl`
+- `user/tests/fs_tests.c`、`test-xv6.py`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img fs2.img
+usertests mount_basic
+usertests mount_dotdot
+usertests dindirect
+mkdir /mnt
+mount 2 /mnt
+ls /mnt
+echo MNT-OK > /mnt/mntfile
+cat /mnt/mntfile
+umount /mnt
+make test-quick
+```
+
+## P3 批次二：交换空间
+
+状态：已完成
+
+完成内容：
+
+- 新增第三块原始 virtio 交换盘 `swap.img`，不承载文件系统。
+- `swap.c` 管理 2048 个交换槽位，每页由 4 个 1KB 磁盘块组成。
+- 换出页使用两个 RSW 位组合作为 PTE 交换标记（`PTE_V=0` 且
+  `PTE_SHM|PTE_COW` 同时置位），PPN 字段记录交换槽号。
+- 原始页权限保存在交换槽元数据中，换入时恢复 R/W/X/U。
+- `swap_evict()` 在物理内存不足时从当前进程换出最高地址用户页，
+  COW 页先私有化再换出。
+- `vmfault()` 识别交换标记后从交换盘读回，并归还交换槽。
+- `uvmunmap()` / `uvmfree()` 释放换出页时自动回收交换槽。
+- fork 遇到换出页时读入一份独立物理副本，父进程保持换出状态。
+- 新增 `swapout` / `swapinfo` 系统调用、`swapinfo` 工具和 `swap_basic` 回归测试。
+- 内核 BSS 增长后，动态模块保留区上移到 `0x80080000`，避免模块加载覆盖内核数据。
+
+涉及文件：
+
+- `kernel/swap.c`、`kernel/swap.h`、`kernel/defs.h`
+- `kernel/vm.c`、`kernel/riscv.h`、`kernel/memlayout.h`
+- `kernel/param.h`、`kernel/plic.c`、`kernel/trap.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/main.c`、`Makefile`、`test-xv6.py`
+- `user/swapinfo.c`、`user/user.h`、`user/usys.pl`
+- `user/tests/mem_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img fs2.img swap.img
+usertests swap_basic
+swapinfo
+make test-quick
+```
+
+## P3 批次三：ASLR
+
+状态：已完成
+
+完成内容：
+
+- `exec` 在分配用户栈前生成随机页偏移，栈起始位置在 0 到 16 页之间变化。
+- 使用 `r_time()`、进程号和线性同余生成器初始化随机种子。
+- 保留 mmap 与堆的固定布局，避免破坏现有需求分页和惰性分配测试。
+- 新增 `aslr` 用户工具，打印当前用户栈地址。
+- `test-xv6.py tools` 连续运行两次 `aslr`，确认地址不同。
+
+涉及文件：
+
+- `kernel/exec.c`
+- `user/aslr.c`
+- `Makefile`、`test-xv6.py`
+
+验证命令：
+
+```bash
+make kernel/kernel fs.img
+aslr
+aslr
+make test-quick
+```
+
+## P3 批次四：clone 轻量线程
+
+状态：已完成（基础版，共享地址空间）
+
+完成内容：
+
+- 新增 `clone` 系统调用，子线程返回 0 并使用调用者提供的新用户栈。
+- `uvmshare()` 为 clone 子线程建立独立页表根，但叶页映射父进程同一物理页。
+- clone 共享页使用 `PTE_SHM|PTE_COW` 作为引用计数标记，最后一个映射释放时回收物理页。
+- COW 页面在 clone 前先私有化，避免线程写入穿透到 fork 父进程。
+- System V 共享内存仍使用原有 `seg->ref` 计数，共享 mmap 继续使用 cow 引用计数。
+- 子线程复制文件描述符、cwd 和进程凭证，共享地址空间但不共享 VMA 描述符。
+- 新增 `clone_basic` 回归测试，验证共享变量可见且无物理页泄漏。
+
+涉及文件：
+
+- `kernel/proc.c`、`kernel/proc.h`（无布局变化）、`kernel/vm.c`
+- `kernel/sysproc.c`、`kernel/syscall.c`、`kernel/syscall.h`
+- `kernel/syscall_names.h`、`kernel/defs.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_basic
+make test-quick
+```
+
+## P3 批次五：clone 生态（futex / thread_create）
+
+状态：已完成
+
+完成内容：
+
+- 新增 `futex_wait` / `futex_wake` 系统调用，以共享内存地址为等待通道。
+- 新增 `gettid` 系统调用，返回当前线程/进程 pid。
+- 新增用户库 `thread_create(fn, arg, stack)`，通过 `clone_stub` 启动线程。
+- `clone_stub` 是用户态汇编入口，线程从 stub 调用 `fn(arg)` 后自动 `exit(0)`，
+  不依赖父进程栈上的局部变量。
+- 新增 `clone_sync` 测试：两个线程使用 RISC-V `amoswap` 自旋锁 + futex 睡眠，
+  精确累加共享计数器。
+
+涉及文件：
+
+- `kernel/futex.c`、`kernel/defs.h`、`kernel/main.c`
+- `kernel/sysproc.c`、`kernel/syscall.c`、`kernel/syscall.h`
+- `kernel/syscall_names.h`
+- `user/clone_stub.S`、`user/ulib.c`、`user/user.h`、`user/usys.pl`
+- `user/tests/proc_tests.c`、`Makefile`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_sync
+make test-quick
+```
+
+## P3 批次六：内核线程
+
+状态：已完成
+
+完成内容：
+
+- 新增 `kthread_create()`，复用 `proc` 表和 MLFQ 调度器创建内核线程。
+- 内核线程不分配用户页表与 trapframe，只使用固定内核栈和上下文。
+- 首次调度进入 `kthreadret()`，先释放调度器持有的 `p->lock`，再执行 `fn(arg)`。
+- 内核线程函数返回后自动调用 `kexit(0)`，父进程可通过 `wait` 回收。
+- `kexit()` 兼容无 `cwd` 的内核线程。
+- selftest 模块新增 `SELFTEST_CMD_KTHREAD` 与 `SELFTEST_CMD_KTHREAD_COUNT`。
+- 新增 `kernel_kthread` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/defs.h`
+- `kernel/module/module_ids.h`、`kernel/modules/selftest.c`
+- `user/tests/module_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests kernel_kthread
+make test-quick
+```
+
+## P3 批次七：线程组语义
+
+状态：已完成
+
+完成内容：
+
+- `struct proc` 增加 `tgid` 字段；普通进程 `tgid == pid`。
+- fork 子进程获得新 tgid；clone 线程继承父线程组 tgid。
+- 内核线程拥有独立 tgid。
+- `getpid()` 返回 tgid，`gettid()` 返回 tid。
+- 新增 `clone_tgid` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/sysproc.c`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_tgid
+make test-quick
+```
+
+## P3 批次八：clone 共享文件表与 cwd
+
+状态：已完成
+
+完成内容：
+
+- 新增 `struct proc_files`，统一保存文件描述符表和 cwd，并带引用计数。
+- 普通进程和 fork 子进程各持有一份独立文件表，底层 file 对象共享。
+- clone 线程共享同一 `proc_files`，`close`、`dup`、`chdir` 对同组线程可见。
+- 最后一个引用释放时统一关闭 fd 和 cwd。
+- 新增 `clone_files`、`clone_cwd` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/file.c`
+- `kernel/sysfile.c`、`kernel/fs.c`、`kernel/defs.h`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_files
+usertests clone_cwd
+make test-quick
+```
+
+## P3 批次九：线程组退出与 tgid kill
+
+状态：已完成
+
+完成内容：
+
+- `kkill()` 同时匹配 pid 和 tgid：按线程组 ID 可终止整个线程组。
+- 线程组组长退出时先终止并回收同 tgid 的兄弟线程，再释放共享页表与文件表。
+- 组长等待兄弟线程进入 ZOMBIE 后统一 `freeproc`，避免共享地址空间提前释放。
+- 新增 `clone_group_exit` 回归测试，通过 `sysinfo` 进程数验证线程被回收。
+
+涉及文件：
+
+- `kernel/proc.c`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_group_exit
+make test-quick
+```
+
+## P3 批次十：waitpid 线程 join
+
+状态：已完成
+
+完成内容：
+
+- 新增 `waitpid(pid, status)` 系统调用，等待指定子线程/子进程退出。
+- `kwaitpid()` 复用 `wait_lock` 与 ZOMBIE 回收流程，只回收指定 pid。
+- 新增 `clone_join` 回归测试：父线程精确 join 两个 clone 线程并检查退出状态。
+
+涉及文件：
+
+- `kernel/proc.c`、`kernel/sysproc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/defs.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_join
+make test-quick
+```
+
+## P3 批次十一：TLS 线程局部存储
+
+状态：已完成
+
+完成内容：
+
+- 新增 `set_tls` / `get_tls` 系统调用，读写 trapframe 中的 `tp` 寄存器值。
+- 每个 clone 线程拥有独立 trapframe，因此 TLS 指针互不干扰。
+- 新增 `clone_tls` 回归测试：子线程修改 TLS 后父线程 TLS 保持不变。
+
+涉及文件：
+
+- `kernel/sysproc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_tls
+make test-quick
+```
+
+## P3 批次十二：tgkill
+
+状态：已完成
+
+完成内容：
+
+- 新增 `tgkill(tgid, tid, sig)` 系统调用，精确终止线程组内指定 tid。
+- `sig == 0` 时只做存在性检查，不发送信号。
+- 新增 `clone_tgkill` 回归测试：只终止指定工作线程，父线程继续运行。
+
+涉及文件：
+
+- `kernel/proc.c`、`kernel/sysproc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/defs.h`
+- `user/user.h`、`user/usys.pl`、`user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_tgkill
+make test-quick
+```
+
+## P3 批次十三：clone 共享 VMA 表
+
+状态：已完成
+
+完成内容：
+
+- `struct proc_vmas` 成为带引用计数的共享对象：fork 复制一份，clone 线程共享同一份。
+- VMA 表使用 sleeplock 保护，`mmap` 的地址分配与登记合并为原子操作，
+  并发 `mmap` / `munmap` / 缺页不会破坏描述符表。
+- 每个 VMA 页在共享表中保存缓存物理地址并持有 cow 引用，
+  单个线程退出只解除自己的页表映射，页面生命周期跟随整个线程组。
+- 缺页时优先复用同组页缓存，其他线程退出后仍能看到已写入的数据。
+- `munmap` 和 `exec` 清理会解除所有共享线程页表中的映射，避免残留访问。
+- fork 复制 VMA 时，私有页复制独立页面，共享页继续映射同一物理页；
+  复制出的页面同样登记到新表缓存，保证后续 clone 线程语义一致。
+- 新增 `clone_vma` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/vma.h`、`kernel/vma.c`
+- `kernel/proc.c`、`kernel/defs.h`
+- `kernel/sysfile.c`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests clone_vma
+usertests -q
+make test-quick
+```
+
+## P3 批次十四：线程组信号与 sigprocmask
+
+状态：已完成
+
+完成内容：
+
+- 新增共享信号状态 `struct proc_sig`，clone 线程共享信号处理表与线程组待处理信号。
+- fork 复制信号处理表但不继承待处理信号；clone 线程共享同一信号状态。
+- `tgkill` 从“杀死指定线程”改为“向指定 tid 投递信号”，支持默认、忽略和自定义处理函数。
+- `sigprocmask` 支持 `SIG_BLOCK` / `SIG_UNBLOCK` / `SIG_SETMASK`，阻塞信号保持待处理。
+- `deliver_signal` 同时处理 per-thread 待处理信号和线程组待处理信号，并跳过被阻塞的信号。
+- `sleep()` 增加待投递信号检查，避免信号先于睡眠到达时线程继续睡死。
+- 新增 `sig_mask`、`clone_signal` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/trap.c`
+- `kernel/signal.h`、`kernel/defs.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`
+- `user/tests/module_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests sig_mask
+usertests clone_signal
+usertests signal_no_reenter
+usertests clone_tgkill
+make test-quick
+```
+
+## P3-K1：进程组 API
+
+状态：已完成
+
+完成内容：
+
+- `struct proc` 增加 `pgid`，init 默认属于自身进程组，fork 继承父进程组，
+  clone 线程共享进程组。
+- 新增 `setpgid` / `getpgid` / `killpg` 系统调用。
+- `setpgid(pid, 0)` 为指定进程创建以自身 pid 为组长的新组；
+  父进程可以为尚未执行 `exec` 的子进程设置进程组。
+- `killpg` 按进程组投递信号，只影响目标组，调用者所在组不受影响。
+- 新增 `pgid_basic` 回归测试。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`
+- `user/tests/proc_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests pgid_basic
+make test-quick
+```
+
+## P3-K2a：内核 STOPPED 状态与 waitpid 选项
+
+状态：已完成
+
+完成内容：
+
+- `enum procstate` 新增 `STOPPED`，`SIGSTOP` / `SIGTSTP` 通过 `stop_pending`
+  延迟到返回用户态前生效，避免打断 fork/exec 早期路径。
+- 停止后的进程在 `usertrap` 中切到调度器，不再返回用户态；`SIGCONT` 恢复运行。
+- `killpg` 支持向整个进程组投递 `SIGSTOP` / `SIGCONT` / `SIGTSTP`。
+- 新增 `waitpid_flags(pid, status, options)`，支持 `WUNTRACED` / `WCONTINUED`。
+- `SIGKILL`、`kkill` 和线程组退出会把停止进程恢复为可运行后回收。
+- 新增 `sig_stop_cont` 回归测试，覆盖停止和继续事件。
+
+涉及文件：
+
+- `kernel/proc.h`、`kernel/proc.c`、`kernel/trap.c`、`kernel/sysproc.c`
+- `kernel/signal.h`、`kernel/stat.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `user/user.h`、`user/usys.pl`
+- `user/tests/module_tests.c`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_usertests fs.img
+usertests sig_stop_cont
+usertests -q
+./test-xv6.py crash
+```
+
+## P3-K2b：终端前台进程组与 shell 作业控制
+
+状态：已完成
+
+完成内容：
+
+- console 维护前台进程组，`tcsetpgrp` / `tcgetpgrp` 设置和读取。
+- `Ctrl-C` 向 `SIGINT` 投递前台组，`Ctrl-Z` 向 `SIGTSTP` 投递前台组。
+- shell 为每个命令创建独立进程组，后台任务进入 job table。
+- 支持 `jobs`、`fg`、`bg`、`stop`；`waitpid_flags` 跟踪停止/继续事件。
+- 子进程在 exec 前恢复 `SIGTSTP` / `SIGINT` 默认处理，避免继承 shell 的忽略设置。
+- `consoleread` 在 `stop_pending` 时返回，阻塞进程可被 `Ctrl-Z` 停止。
+
+涉及文件：
+
+- `kernel/console.c`、`kernel/proc.c`、`kernel/defs.h`
+- `kernel/syscall.c`、`kernel/syscall.h`、`kernel/syscall_names.h`
+- `kernel/stat.h`、`kernel/module/module.h`
+- `user/sh.c`、`user/sleep.c`、`user/user.h`、`user/usys.pl`
+- `Makefile`、`test-xv6.py`
+
+验证命令：
+
+```bash
+make kernel/kernel user/_sh user/_sleep fs.img
+./test-xv6.py jobs
+make test-quick
+./test-xv6.py crash
+```
+
 ## 文档入口
 
 - 模块架构：[xv6-riscv-module-architecture.md](xv6-riscv-module-architecture.md)

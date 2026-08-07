@@ -133,6 +133,47 @@ extern uint64 sys_setgid(void);
 extern uint64 sys_umask(void);
 extern uint64 sys_mmap(void);
 extern uint64 sys_munmap(void);
+extern uint64 sys_mount(void);
+extern uint64 sys_umount(void);
+extern uint64 sys_swapout(void);
+extern uint64 sys_swapinfo(void);
+extern uint64 sys_clone(void);
+extern uint64 sys_futex_wait(void);
+extern uint64 sys_futex_wake(void);
+extern uint64 sys_gettid(void);
+extern uint64 sys_waitpid(void);
+extern uint64 sys_waitpid_flags(void);
+extern uint64 sys_set_tls(void);
+extern uint64 sys_get_tls(void);
+extern uint64 sys_tgkill(void);
+extern uint64 sys_sigprocmask(void);
+extern uint64 sys_setpgid(void);
+extern uint64 sys_getpgid(void);
+extern uint64 sys_killpg(void);
+extern uint64 sys_tcsetpgrp(void);
+extern uint64 sys_tcgetpgrp(void);
+extern uint64 sys_exit_group(void);
+extern uint64 sys_sigaction(void);
+extern uint64 sys_sigpending(void);
+extern uint64 sys_dup2(void);
+extern uint64 sys_getcwd(void);
+extern uint64 sys_chroot(void);
+extern uint64 sys_fsync(void);
+extern uint64 sys_nanosleep(void);
+extern uint64 sys_clock_gettime(void);
+extern uint64 sys_readv(void);
+extern uint64 sys_writev(void);
+extern uint64 sys_pipe2(void);
+extern uint64 sys_poll(void);
+extern uint64 sys_select(void);
+extern uint64 sys_mprotect(void);
+extern uint64 sys_flock(void);
+extern uint64 sys_semget(void);
+extern uint64 sys_semop(void);
+extern uint64 sys_semctl(void);
+extern uint64 sys_futex_wait_timeout(void);
+extern uint64 sys_futex_set_owner(void);
+extern uint64 sys_futex_clear_owner(void);
 
 // 系统调用号到处理函数的映射表，定义在 syscall.h。
 // 使用 C99 指定初始化器，下标即系统调用号。
@@ -183,6 +224,47 @@ static uint64 (*syscalls[])(void) = {
 [SYS_umask] sys_umask,
 [SYS_mmap] sys_mmap,
 [SYS_munmap] sys_munmap,
+[SYS_mount] sys_mount,
+[SYS_umount] sys_umount,
+[SYS_swapout] sys_swapout,
+[SYS_swapinfo] sys_swapinfo,
+[SYS_clone] sys_clone,
+[SYS_futex_wait] sys_futex_wait,
+[SYS_futex_wake] sys_futex_wake,
+[SYS_gettid] sys_gettid,
+[SYS_waitpid] sys_waitpid,
+[SYS_waitpid_flags] sys_waitpid_flags,
+[SYS_set_tls] sys_set_tls,
+[SYS_get_tls] sys_get_tls,
+[SYS_tgkill] sys_tgkill,
+[SYS_sigprocmask] sys_sigprocmask,
+[SYS_setpgid] sys_setpgid,
+[SYS_getpgid] sys_getpgid,
+[SYS_killpg] sys_killpg,
+[SYS_tcsetpgrp] sys_tcsetpgrp,
+[SYS_tcgetpgrp] sys_tcgetpgrp,
+[SYS_exit_group] sys_exit_group,
+[SYS_sigaction] sys_sigaction,
+[SYS_sigpending] sys_sigpending,
+[SYS_dup2] sys_dup2,
+[SYS_getcwd] sys_getcwd,
+[SYS_chroot] sys_chroot,
+[SYS_fsync] sys_fsync,
+[SYS_nanosleep] sys_nanosleep,
+[SYS_clock_gettime] sys_clock_gettime,
+[SYS_readv] sys_readv,
+[SYS_writev] sys_writev,
+[SYS_pipe2] sys_pipe2,
+[SYS_poll] sys_poll,
+[SYS_select] sys_select,
+[SYS_mprotect] sys_mprotect,
+[SYS_flock] sys_flock,
+[SYS_semget] sys_semget,
+[SYS_semop] sys_semop,
+[SYS_semctl] sys_semctl,
+[SYS_futex_wait_timeout] sys_futex_wait_timeout,
+[SYS_futex_set_owner] sys_futex_set_owner,
+[SYS_futex_clear_owner] sys_futex_clear_owner,
 };
 
 void

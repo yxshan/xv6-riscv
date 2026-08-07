@@ -45,32 +45,142 @@ trapinithart(void)
 static void
 deliver_signal(struct proc *p)
 {
+  uint64 pending, blocked, h, mask;
+  int flags, d;
+
+  if(p->sig == 0 || p->sigactive)
+    return;
+
+  // 停止信号延迟到返回用户态前生效，避免打断 fork/exec 早期路径。
+  acquire(&p->lock);
+  if(p->stop_pending){
+    p->stop_pending = 0;
+    p->state = STOPPED;
+    release(&p->lock);
+    wakeup(p->parent);
+    return;
+  }
+  release(&p->lock);
+
+  acquire(&p->lock);
+  pending = p->sigpending;
+  blocked = p->sigblocked;
+  release(&p->lock);
+
+  // 先投递精确指向当前线程的信号。
   for(int sig = 1; sig < NSIG; sig++){
-    uint64 h = p->sighandlers[sig];
-    if((p->sigpending & (1UL << sig)) == 0 || h == 0)
+    if((pending & (1UL << sig)) == 0 || (blocked & (1UL << sig)))
       continue;
-    // handler + 16 存储：2 表示 SIG_DFL，3 表示 SIG_IGN。
-    if(h == 3){
+
+    acquire(&p->sig->lock);
+    h = p->sig->handlers[sig];
+    mask = p->sig->masks[sig];
+    flags = p->sig->flags[sig];
+    release(&p->sig->lock);
+
+    if(h == 3){ // SIG_IGN
+      acquire(&p->lock);
       p->sigpending &= ~(1UL << sig);
+      release(&p->lock);
       continue;
     }
-    if(h == 2){
+    if(h == 0 || h == 2){ // SIG_DFL
+      d = sig_default_kind(sig);
+      if(d == SIGACT_IGN){
+        acquire(&p->lock);
+        p->sigpending &= ~(1UL << sig);
+        release(&p->lock);
+        continue;
+      }
+      if(d == SIGACT_STOP){
+        acquire(&p->lock);
+        p->sigpending &= ~(1UL << sig);
+        p->state = STOPPED;
+        release(&p->lock);
+        wakeup(p->parent);
+        return;
+      }
+      acquire(&p->lock);
       p->sigpending &= ~(1UL << sig);
       p->killed = 1;
-      continue;
-    }
-    // 信号处理函数执行期间不再重入，新信号留到 sigreturn 后交付。
-    if(p->sigactive)
-      continue;
-    {
-      p->sigpending &= ~(1UL << sig);
-      p->sigactive = 1;
-      p->sigframe = *p->trapframe;
-      p->trapframe->epc = h - 16;
-      p->trapframe->a0 = sig;
+      release(&p->lock);
       return;
     }
+
+    acquire(&p->lock);
+    p->sigpending &= ~(1UL << sig);
+    p->sigblocked_saved = p->sigblocked;
+    if(!(flags & SA_NODEFER))
+      p->sigblocked |= (1UL << sig);
+    p->sigblocked |= mask;
+    p->sigblocked &= ~((1UL << SIGKILL) | (1UL << SIGSTOP));
+    release(&p->lock);
+    if(flags & SA_RESETHAND){
+      acquire(&p->sig->lock);
+      p->sig->handlers[sig] = 2;
+      release(&p->sig->lock);
+    }
+    p->sigactive = 1;
+    p->sigframe = *p->trapframe;
+    p->trapframe->epc = h - 16;
+    p->trapframe->a0 = sig;
+    return;
   }
+
+  // 再处理线程组共享的待处理信号。
+  acquire(&p->sig->lock);
+  for(int sig = 1; sig < NSIG; sig++){
+    if((p->sig->pending & (1UL << sig)) == 0 ||
+       (blocked & (1UL << sig)))
+      continue;
+    h = p->sig->handlers[sig];
+    mask = p->sig->masks[sig];
+    flags = p->sig->flags[sig];
+    if(h == 3){ // SIG_IGN
+      p->sig->pending &= ~(1UL << sig);
+      continue;
+    }
+    if(h == 0 || h == 2){ // SIG_DFL
+      d = sig_default_kind(sig);
+      if(d == SIGACT_IGN){
+        p->sig->pending &= ~(1UL << sig);
+        continue;
+      }
+      p->sig->pending &= ~(1UL << sig);
+      release(&p->sig->lock);
+      if(d == SIGACT_STOP){
+        acquire(&p->lock);
+        p->state = STOPPED;
+        release(&p->lock);
+        wakeup(p->parent);
+        return;
+      }
+      acquire(&p->lock);
+      p->killed = 1;
+      release(&p->lock);
+      return;
+    }
+    p->sig->pending &= ~(1UL << sig);
+    release(&p->sig->lock);
+    acquire(&p->lock);
+    p->sigblocked_saved = p->sigblocked;
+    if(!(flags & SA_NODEFER))
+      p->sigblocked |= (1UL << sig);
+    p->sigblocked |= mask;
+    p->sigblocked &= ~((1UL << SIGKILL) | (1UL << SIGSTOP));
+    release(&p->lock);
+    if(flags & SA_RESETHAND){
+      acquire(&p->sig->lock);
+      p->sig->handlers[sig] = 2;
+      release(&p->sig->lock);
+    }
+    p->sigactive = 1;
+    p->sigframe = *p->trapframe;
+    p->trapframe->epc = h - 16;
+    p->trapframe->a0 = sig;
+    return;
+  }
+  release(&p->sig->lock);
 }
 
 //
@@ -131,6 +241,13 @@ usertrap(void)
     yield();
 
   deliver_signal(p);
+
+  // 已停止的进程不能返回用户态，切到调度器等待 SIGCONT。
+  if(p->state == STOPPED){
+    acquire(&p->lock);
+    sched();
+    release(&p->lock);
+  }
 
   if(killed(p))
     kexit(-1);
@@ -275,7 +392,7 @@ devintr()
 
     if(irq == UART0_IRQ){
       uartintr();
-    } else if(irq == VIRTIO0_IRQ || irq == VIRTIO1_IRQ){
+    } else if(irq >= VIRTIO0_IRQ && irq < VIRTIO0_IRQ + NDISK){
       virtio_disk_intr(irq - VIRTIO0_IRQ);
     } else if(irq){
       printf("unexpected interrupt irq=%d\n", irq);

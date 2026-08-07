@@ -310,7 +310,7 @@ writebig(char *s)
     exit(1);
   }
 
-  for(i = 0; i < MAXFILE; i++){
+  for(i = 0; i < NDIRECT + NINDIRECT; i++){
     ((int*)buf)[0] = i;
     if(write(fd, buf, BSIZE) != BSIZE){
       printf("%s: error: write big file failed i=%d\n", s, i);
@@ -330,7 +330,7 @@ writebig(char *s)
   for(;;){
     i = read(fd, buf, BSIZE);
     if(i == 0){
-      if(n != MAXFILE){
+      if(n != NDIRECT + NINDIRECT){
         printf("%s: read only %d blocks from big", s, n);
         exit(1);
       }
@@ -1494,7 +1494,7 @@ diskfull(char *s)
       done = 1;
       break;
     }
-    for(int i = 0; i < MAXFILE; i++){
+    for(int i = 0; i < NDIRECT + NINDIRECT; i++){
       char buf[BSIZE];
       if(write(fd, buf, BSIZE) != BSIZE){
         done = 1;
@@ -1638,6 +1638,159 @@ disk1_read(char *s)
   exit(0);
 }
 
+// 通用挂载表：mount/umount 可以把第二磁盘挂到任意空目录。
+void
+mount_basic(char *s)
+{
+  struct stat st;
+  int fd, n;
+
+  if(umount("/disk1") < 0){
+    printf("%s: umount default /disk1 failed\n", s);
+    exit(1);
+  }
+  if(mkdir("/mnt") < 0){
+    printf("%s: mkdir /mnt failed\n", s);
+    exit(1);
+  }
+  if(mount(2, "/mnt") < 0){
+    printf("%s: mount /mnt failed\n", s);
+    exit(1);
+  }
+  if(stat("/mnt/README.md", &st) < 0 || st.size <= 0){
+    printf("%s: stat mounted README.md failed\n", s);
+    exit(1);
+  }
+  fd = open("/mnt/newfile", O_CREATE|O_WRONLY);
+  if(fd < 0 || write(fd, "mounted", 7) != 7){
+    printf("%s: write mounted file failed\n", s);
+    exit(1);
+  }
+  close(fd);
+  fd = open("/mnt/newfile", O_RDONLY);
+  if(fd < 0 || (n = read(fd, buf, 16)) != 7 || buf[0] != 'm'){
+    printf("%s: reread mounted file failed\n", s);
+    exit(1);
+  }
+  close(fd);
+  if(umount("/mnt") < 0){
+    printf("%s: umount /mnt failed\n", s);
+    exit(1);
+  }
+  if(stat("/mnt/README.md", &st) == 0){
+    printf("%s: mounted tree still visible after umount\n", s);
+    exit(1);
+  }
+  if(unlink("/mnt") < 0){
+    printf("%s: unlink /mnt failed\n", s);
+    exit(1);
+  }
+  if(mount(2, "/disk1") < 0){
+    printf("%s: restore /disk1 failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// 挂载文件系统根的 ".." 必须跨回挂载点在父文件系统中的父目录。
+void
+mount_dotdot(char *s)
+{
+  struct stat st;
+  int fd;
+
+  if(umount("/disk1") < 0){
+    printf("%s: umount default /disk1 failed\n", s);
+    exit(1);
+  }
+  if(mkdir("/mnt") < 0){
+    printf("%s: mkdir /mnt failed\n", s);
+    exit(1);
+  }
+  if(mount(2, "/mnt") < 0){
+    printf("%s: mount /mnt failed\n", s);
+    exit(1);
+  }
+  if(chdir("/mnt") < 0){
+    printf("%s: chdir /mnt failed\n", s);
+    exit(1);
+  }
+  if(chdir("..") < 0){
+    printf("%s: chdir .. from mount root failed\n", s);
+    exit(1);
+  }
+  fd = open("../mountroot", O_CREATE|O_WRONLY);
+  if(fd < 0){
+    printf("%s: create ../mountroot failed\n", s);
+    exit(1);
+  }
+  close(fd);
+  if(stat("/mountroot", &st) < 0){
+    printf("%s: .. did not cross mount boundary\n", s);
+    exit(1);
+  }
+  unlink("/mountroot");
+  chdir("/");
+  if(umount("/mnt") < 0){
+    printf("%s: umount /mnt failed\n", s);
+    exit(1);
+  }
+  if(unlink("/mnt") < 0){
+    printf("%s: unlink /mnt failed\n", s);
+    exit(1);
+  }
+  if(mount(2, "/disk1") < 0){
+    printf("%s: restore /disk1 failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// 双重间接块：写入并读回超过单间接块上限的文件。
+void
+dindirect(char *s)
+{
+  int fd, i;
+  enum { NBLOCKS = NDIRECT + NINDIRECT + 2 };
+
+  unlink("dindirect.dat");
+  fd = open("dindirect.dat", O_CREATE|O_RDWR);
+  if(fd < 0){
+    printf("%s: open dindirect.dat failed\n", s);
+    exit(1);
+  }
+  for(i = 0; i < NBLOCKS; i++){
+    memset(buf, 'a' + i % 26, BSIZE);
+    if(write(fd, buf, BSIZE) != BSIZE){
+      printf("%s: write dindirect block %d failed\n", s, i);
+      exit(1);
+    }
+  }
+  close(fd);
+
+  fd = open("dindirect.dat", O_RDONLY);
+  if(fd < 0){
+    printf("%s: reopen dindirect.dat failed\n", s);
+    exit(1);
+  }
+  for(i = 0; i < NBLOCKS; i++){
+    if(read(fd, buf, BSIZE) != BSIZE || buf[0] != 'a' + i % 26){
+      printf("%s: dindirect data mismatch at block %d\n", s, i);
+      exit(1);
+    }
+  }
+  if(read(fd, buf, 1) != 0){
+    printf("%s: dindirect file too large\n", s);
+    exit(1);
+  }
+  close(fd);
+  if(unlink("dindirect.dat") < 0){
+    printf("%s: unlink dindirect.dat failed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
 
 struct test fs_quicktests[] = {
   {truncate1, "truncate1"},
@@ -1666,12 +1819,15 @@ struct test fs_quicktests[] = {
   {dirfile, "dirfile"},
   {iref, "iref"},
   {disk1_read, "disk1_read"},
+  {mount_basic, "mount_basic"},
+  {mount_dotdot, "mount_dotdot"},
   { 0, 0},
 };
 struct test fs_slowtests[] = {
   {bigdir, "bigdir"},
   {manywrites, "manywrites"},
   {badwrite, "badwrite"},
+  {dindirect, "dindirect"},
   {diskfull, "diskfull"},
   {outofinodes, "outofinodes"},
   { 0, 0},

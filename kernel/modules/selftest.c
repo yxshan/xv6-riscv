@@ -51,6 +51,14 @@ selftest_signal(void)
   return ok ? 0 : -1;
 }
 
+static int kthread_count;
+
+static void
+kthread_worker(void *arg)
+{
+  kthread_count++;
+}
+
 static uint64
 selftest_handler(int cmd, uint64 arg0, uint64 arg1)
 {
@@ -68,6 +76,10 @@ selftest_handler(int cmd, uint64 arg0, uint64 arg1)
     if(cow_selftest() != 0 || shm_selftest() != 0)
       return -1;
     return 0;
+  case SELFTEST_CMD_KTHREAD:
+    return kthread_create(kthread_worker, 0);
+  case SELFTEST_CMD_KTHREAD_COUNT:
+    return kthread_count;
   default:
     return -1;
   }

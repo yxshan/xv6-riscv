@@ -25,10 +25,16 @@ OBJS = \
   $K/sysproc.o \
   $K/bio.o \
   $K/fs.o \
+  $K/mount.o \
+  $K/swap.o \
+  $K/futex.o \
+  $K/sem.o \
   $K/log.o \
   $K/sleeplock.o \
   $K/file.o \
+  $K/pseudo.o \
   $K/pipe.o \
+  $K/poll.o \
   $K/exec.o \
   $K/sysfile.o \
   $K/kernelvec.o \
@@ -124,7 +130,10 @@ $K/%.o: $K/%.S
 tags: $(OBJS)
 	etags kernel/*.S kernel/*.c
 
-ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
+ULIB = $U/ulib.o $U/usys.o $U/clone_stub.o $U/printf.o $U/umalloc.o
+
+$U/clone_stub.o: $U/clone_stub.S
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 _%: %.o $(ULIB) $U/user.ld
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
@@ -164,7 +173,7 @@ $U/usys.o : $U/usys.S
 $U/_forktest: $U/forktest.o $(ULIB)
 	# forktest has less library code linked in - needs to be small
 	# in order to be able to max out the proc table.
-	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o
+	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o $U/clone_stub.o
 	$(OBJDUMP) -S $U/_forktest > $U/forktest.asm
 
 mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
@@ -213,13 +222,21 @@ UPROGS=\
 	$U/_chmod\
 	$U/_chown\
 	$U/_permexec\
+	$U/_mount\
+	$U/_umount\
+	$U/_swapinfo\
+	$U/_aslr\
+	$U/_sleep\
 	$(UMOD_BINS)\
 
 fs.img: mkfs/mkfs README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
-	mkfs/mkfs fs.img README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
+	mkfs/mkfs -disk1 fs.img README.md $(UPROGS) $(DYNMOD_BIN) $(DYNMOD2_BIN)
 
 fs2.img: mkfs/mkfs README.md $U/_echo
 	mkfs/mkfs fs2.img README.md $U/_echo
+
+swap.img:
+	dd if=/dev/zero of=$@ bs=1024 count=8192 2>/dev/null
 
 -include kernel/*.d kernel/module/*.d kernel/modules/*.d user/*.d user/modules/*.d user/tests/*.d
 
@@ -232,6 +249,7 @@ clean:
 	user/tests/*.o user/tests/*.d user/tests/*.asm user/tests/*.sym \
 	$(DYNMOD_OBJ) $(DYNMOD_BIN) $(DYNMOD2_OBJ) $(DYNMOD2_BIN) \
 	$K/kernel fs.img fs2.img \
+	swap.img \
 	mkfs/mkfs .gdbinit \
         $U/usys.S \
 	$(UPROGS)
@@ -252,14 +270,16 @@ QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 QEMUOPTS += -drive file=fs2.img,if=none,format=raw,id=x1
 QEMUOPTS += -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
+QEMUOPTS += -drive file=swap.img,if=none,format=raw,id=x2
+QEMUOPTS += -device virtio-blk-device,drive=x2,bus=virtio-mmio-bus.2
 
-qemu: check-qemu-version $K/kernel fs.img fs2.img
+qemu: check-qemu-version $K/kernel fs.img fs2.img swap.img
 	$(QEMU) $(QEMUOPTS)
 
 .gdbinit: .gdbinit.tmpl-riscv
 	sed "s/:1234/:$(GDBPORT)/" < $^ > $@
 
-qemu-gdb: $K/kernel .gdbinit fs.img fs2.img
+qemu-gdb: $K/kernel .gdbinit fs.img fs2.img swap.img
 	@echo "*** Now run 'gdb' in another window." 1>&2
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
 
@@ -269,9 +289,10 @@ print-gdbport:
 host-test:
 	python3 tools/check-tests.py
 
-test-quick: kernel/kernel fs.img host-test
+test-quick: kernel/kernel fs.img swap.img host-test
 	./test-xv6.py -q usertests
 	./test-xv6.py tools
+	./test-xv6.py jobs
 	./test-xv6.py grind
 	./test-xv6.py modules
 

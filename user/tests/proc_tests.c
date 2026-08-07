@@ -3,6 +3,7 @@
 // 每个测试函数由 usertests 驱动在独立子进程中运行。
 #include "tests.h"
 #include "kernel/module/module_ids.h"
+#include "kernel/signal.h"
 
 void
 exectest(char *s)
@@ -586,11 +587,510 @@ prio_boost(char *s)
   exit(0);
 }
 
+static int clone_shared;
+
+static int sync_counter;
+static int sync_mutex;
+static int sync_tid;
+static int sync_workers;
+static int tgid_child_pid;
+static int tgid_child_tid;
+static int shared_fd;
+static int join_val1;
+static int join_val2;
+static uint64 tls_child_val;
+static char *vma_shared_map;
+
+static void
+group_worker(void *arg)
+{
+  for(;;)
+    pause(1000);
+}
+
+static void
+join_worker1(void *arg)
+{
+  join_val1 = 1;
+}
+
+static void
+join_worker2(void *arg)
+{
+  join_val2 = 2;
+}
+
+static void
+tls_worker(void *arg)
+{
+  set_tls(0x2222);
+  tls_child_val = get_tls();
+}
+
+static inline int
+sync_atomic_swap(int *p, int v)
+{
+  int prev;
+
+  asm volatile("amoswap.w.aq %0, %1, (%2)"
+               : "=r"(prev) : "r"(v), "r"(p) : "memory");
+  return prev;
+}
+
+static void
+sync_worker(void *arg)
+{
+  sync_workers++;
+  sync_tid = gettid();
+  for(int i = 0; i < 500; i++){
+    while(sync_atomic_swap(&sync_mutex, 1) != 0)
+      futex_wait((uint64)&sync_mutex, 1);
+    sync_counter++;
+    sync_atomic_swap(&sync_mutex, 0);
+    futex_wake((uint64)&sync_mutex, 1);
+  }
+}
+
+static void
+tgid_worker(void *arg)
+{
+  tgid_child_pid = getpid();
+  tgid_child_tid = gettid();
+}
+
+static void
+files_worker(void *arg)
+{
+  close(shared_fd);
+}
+
+static void
+cwd_worker(void *arg)
+{
+  if(chdir("cdir") < 0)
+    exit(1);
+}
+
+static void
+vma_worker(void *arg)
+{
+  if(vma_shared_map == 0)
+    exit(1);
+  vma_shared_map[0] = 'C';
+  vma_shared_map[PGSIZE - 1] = 'D';
+}
+
+// clone + futex：两个线程通过共享 mutex 保护计数器，最终结果必须无丢失更新。
+void
+clone_sync(char *s)
+{
+  char *s1 = sbrk(PGSIZE);
+  char *s2 = sbrk(PGSIZE);
+  int p1, p2;
+
+  if(s1 == SBRK_ERROR || s2 == SBRK_ERROR){
+    printf("%s: sbrk stacks failed\n", s);
+    exit(1);
+  }
+  sync_counter = 0;
+  sync_mutex = 0;
+  sync_tid = 0;
+  sync_workers = 0;
+
+  p1 = thread_create(sync_worker, 0, s1 + PGSIZE);
+  p2 = thread_create(sync_worker, 0, s2 + PGSIZE);
+  if(p1 < 0 || p2 < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+
+  if(wait(0) < 0 || wait(0) < 0){
+    printf("%s: clone wait failed\n", s);
+    exit(1);
+  }
+  if(sync_counter != 1000){
+    printf("%s: counter %d workers %d, expected 1000/2\n",
+           s, sync_counter, sync_workers);
+    exit(1);
+  }
+  if(sync_tid == getpid()){
+    printf("%s: gettid did not return child id\n", s);
+    exit(1);
+  }
+  if(sync_workers != 2){
+    printf("%s: workers %d, expected 2\n", s, sync_workers);
+    exit(1);
+  }
+  sbrk(-2 * PGSIZE);
+  exit(0);
+}
+
+// tgkill：精确终止同组指定 tid，不影响父线程。
+void
+clone_tgkill(char *s)
+{
+  int parent_tgid = getpid();
+  char *stack = sbrk(PGSIZE);
+  int pid, status;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(group_worker, 0, stack + PGSIZE);
+  if(pid < 0 || tgkill(parent_tgid, pid, 9) < 0){
+    printf("%s: tgkill failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, &status) != pid){
+    printf("%s: tgkill wait failed\n", s);
+    exit(1);
+  }
+  if(getpid() != parent_tgid){
+    printf("%s: parent thread was killed\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
+// TLS：每个 clone 线程拥有独立的 tp 指针。
+void
+clone_tls(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  if(set_tls(0x1111) < 0){
+    printf("%s: set_tls failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(tls_worker, 0, stack + PGSIZE);
+  if(pid < 0 || waitpid(pid, 0) != pid){
+    printf("%s: clone_tls wait failed\n", s);
+    exit(1);
+  }
+  if(get_tls() != 0x1111){
+    printf("%s: parent tls changed\n", s);
+    exit(1);
+  }
+  if(tls_child_val != 0x2222){
+    printf("%s: child tls not independent\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
+// waitpid：父线程按 tid 精确等待并回收指定 clone 线程。
+void
+clone_join(char *s)
+{
+  char *s1 = sbrk(PGSIZE);
+  char *s2 = sbrk(PGSIZE);
+  int p1, p2, st1, st2;
+
+  if(s1 == SBRK_ERROR || s2 == SBRK_ERROR){
+    printf("%s: sbrk stacks failed\n", s);
+    exit(1);
+  }
+  join_val1 = 0;
+  join_val2 = 0;
+  p1 = thread_create(join_worker1, 0, s1 + PGSIZE);
+  p2 = thread_create(join_worker2, 0, s2 + PGSIZE);
+  if(p1 < 0 || p2 < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(waitpid(p1, &st1) != p1 || st1 != 0 ||
+     waitpid(p2, &st2) != p2 || st2 != 0){
+    printf("%s: waitpid failed\n", s);
+    exit(1);
+  }
+  if(join_val1 != 1 || join_val2 != 2){
+    printf("%s: join workers did not run\n", s);
+    exit(1);
+  }
+  sbrk(-2 * PGSIZE);
+  exit(0);
+}
+
+// 线程组退出：组长 exit 时同 tgid 的线程也应被终止并回收。
+void
+clone_group_exit(char *s)
+{
+  uint64 before = module_call(KMOD_SYSINFO, SYSINFO_CMD_PROC, 0, 0);
+  int pid = fork();
+  int status;
+
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    char *stack = sbrk(PGSIZE);
+    if(stack == SBRK_ERROR || thread_create(group_worker, 0, stack + PGSIZE) < 0)
+      exit(1);
+    exit(0);
+  }
+  if(wait(&status) != pid || status != 0){
+    printf("%s: group leader wait failed\n", s);
+    exit(1);
+  }
+  if(module_call(KMOD_SYSINFO, SYSINFO_CMD_PROC, 0, 0) > before){
+    printf("%s: group threads not reclaimed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// clone 线程共享文件描述符表：子线程 close 后父进程同一 fd 也失效。
+void
+clone_files(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  shared_fd = open("sharedfile", O_CREATE|O_RDWR);
+  if(shared_fd < 0){
+    printf("%s: open sharedfile failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(files_worker, 0, stack + PGSIZE);
+  if(pid < 0 || wait(0) != pid){
+    printf("%s: clone_files wait failed\n", s);
+    exit(1);
+  }
+  if(close(shared_fd) != -1){
+    printf("%s: file table not shared\n", s);
+    exit(1);
+  }
+  unlink("sharedfile");
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
+// clone 线程共享 cwd：子线程 chdir 后父进程相对路径随之改变。
+void
+clone_cwd(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  struct stat st;
+  int pid, fd;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  unlink("/cdir");
+  if(mkdir("/cdir") < 0){
+    printf("%s: mkdir cdir failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(cwd_worker, 0, stack + PGSIZE);
+  if(pid < 0 || wait(0) != pid){
+    printf("%s: clone_cwd wait failed\n", s);
+    exit(1);
+  }
+  fd = open("probe", O_CREATE|O_WRONLY);
+  if(fd < 0){
+    printf("%s: open probe failed\n", s);
+    exit(1);
+  }
+  close(fd);
+  if(stat("/cdir/probe", &st) < 0 || stat("/probe", &st) == 0){
+    printf("%s: cwd not shared\n", s);
+    exit(1);
+  }
+  unlink("/cdir/probe");
+  chdir("/");
+  unlink("/cdir");
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
+// clone 线程共享 VMA 表：父线程 mmap 后子线程缺页建立页面，
+// 父线程再次访问时必须看到同一物理页。
+void
+clone_vma(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  vma_shared_map = mmap(0, 2*PGSIZE, PROT_READ|PROT_WRITE,
+                        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+  if(vma_shared_map == MAP_FAILED){
+    printf("%s: mmap failed\n", s);
+    exit(1);
+  }
+  pid = thread_create(vma_worker, 0, stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(waitpid(pid, 0) != pid){
+    printf("%s: clone_vma wait failed\n", s);
+    exit(1);
+  }
+  if(vma_shared_map[0] != 'C' || vma_shared_map[PGSIZE - 1] != 'D'){
+    printf("%s: vma page not shared\n", s);
+    exit(1);
+  }
+  if(munmap(vma_shared_map, 2*PGSIZE) < 0){
+    printf("%s: munmap failed\n", s);
+    exit(1);
+  }
+  vma_shared_map = 0;
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
+// clone 线程共享 tgid：子线程 getpid() 等于父进程 tgid，gettid() 是新 tid。
+void
+clone_tgid(char *s)
+{
+  int parent_pid = getpid();
+  int parent_tid = gettid();
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  if(parent_pid != parent_tid){
+    printf("%s: normal process tgid mismatch\n", s);
+    exit(1);
+  }
+  pid = thread_create(tgid_worker, 0, stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(wait(0) != pid){
+    printf("%s: clone wait failed\n", s);
+    exit(1);
+  }
+  if(tgid_child_pid != parent_pid){
+    printf("%s: child tgid %d != parent %d\n", s, tgid_child_pid, parent_pid);
+    exit(1);
+  }
+  if(tgid_child_tid == parent_tid || tgid_child_tid == 0){
+    printf("%s: child tid not distinct\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
+static void
+clone_worker(void *arg)
+{
+  clone_shared = 0x1234;
+}
+
+// 进程组：子进程创建/加入新组，父进程可只向该组投递信号。
+void
+pgid_basic(char *s)
+{
+  int parent_pgid = getpgid(0);
+  int pid, st;
+
+  pid = fork();
+  if(pid < 0){
+    printf("%s: fork failed\n", s);
+    exit(1);
+  }
+  if(pid == 0){
+    if(setpgid(0, 0) < 0 || getpgid(0) != getpid())
+      exit(1);
+    pause(1000);
+    exit(0);
+  }
+  if(setpgid(pid, pid) < 0){
+    kill(pid);
+    wait(&st);
+    printf("%s: setpgid failed\n", s);
+    exit(1);
+  }
+  if(getpgid(pid) != pid){
+    printf("%s: child pgid %d != %d\n", s, getpgid(pid), pid);
+    kill(pid);
+    wait(&st);
+    exit(1);
+  }
+  if(killpg(pid, SIGKILL) < 0){
+    printf("%s: killpg failed\n", s);
+    exit(1);
+  }
+  if(wait(&st) != pid){
+    printf("%s: wait failed\n", s);
+    exit(1);
+  }
+  if(getpgid(0) != parent_pgid){
+    printf("%s: parent pgid changed\n", s);
+    exit(1);
+  }
+  exit(0);
+}
+
+// clone：新线程共享父进程地址空间，写入对父进程可见。
+void
+clone_basic(char *s)
+{
+  char *stack = sbrk(PGSIZE);
+  int pid;
+
+  if(stack == SBRK_ERROR){
+    printf("%s: sbrk stack failed\n", s);
+    exit(1);
+  }
+  clone_shared = 0;
+  pid = thread_create(clone_worker, 0, stack + PGSIZE);
+  if(pid < 0){
+    printf("%s: clone failed\n", s);
+    exit(1);
+  }
+  if(wait(0) != pid){
+    printf("%s: clone wait failed\n", s);
+    exit(1);
+  }
+  if(clone_shared != 0x1234){
+    printf("%s: shared memory not visible\n", s);
+    exit(1);
+  }
+  sbrk(-PGSIZE);
+  exit(0);
+}
+
 // can the kernel tolerate running out of disk space?
 
 struct test proc_quicktests[] = {
   {exectest, "exectest"},
   {pipe1, "pipe1"},
+  {clone_basic, "clone_basic"},
+  {clone_sync, "clone_sync"},
+  {clone_tgid, "clone_tgid"},
+  {clone_files, "clone_files"},
+  {clone_cwd, "clone_cwd"},
+  {clone_vma, "clone_vma"},
+  {clone_join, "clone_join"},
+  {clone_tls, "clone_tls"},
+  {clone_tgkill, "clone_tgkill"},
+  {clone_group_exit, "clone_group_exit"},
+  {pgid_basic, "pgid_basic"},
   {killstatus, "killstatus"},
   {preempt, "preempt"},
   {exitwait, "exitwait"},
